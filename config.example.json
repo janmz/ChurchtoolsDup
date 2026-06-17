@@ -1,0 +1,12 @@
+{
+  "base_url": "https://meine-gemeinde.church.tools",
+  "login_token": "HIER_LOGIN_TOKEN_EINTRAGEN",
+  "delay_ms": 500,
+  "permission_groups": {
+    "edit_persons": "Personen Administration",
+    "export_persons": "Personen exportieren"
+  },
+  "duplicate_relationship_type": {
+    "name": "Duplikat"
+  }
+}

@@ -1,0 +1,25 @@
+# Secrets and local config
+config.json
+.env
+*.local.json
+
+# Local exports and test data (may contain real person data)
+dup.csv
+dup-test.csv
+dup-*.csv
+personen*.csv
+
+# Build output
+/churchtools-dup
+/churchtools-dup.exe
+rsrc_windows_*.syso
+
+# IDE / AI instructions
+.cursor/
+.cursorrules
+AGENTS.md
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
