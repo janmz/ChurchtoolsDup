@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.1.0.16] - 2026-06-18 21:37:55
+
+### Fixed
+
+- CSV-Import: UTF-8-BOM am Dateianfang (Excel, eigener Export) wird erkannt;
+  Fehler „csv benötigt eine DupID-spalte“ bei korrekter Kopfzeile behoben
+- CSV-Import: Trennzeichen `,`, `;` oder Tab werden automatisch erkannt;
+  Anführungszeichen für Felder mit Komma werden beim Einlesen berücksichtigt
+- CSV-Export: schreibt immer mit Komma; Felder mit Komma werden in `"…"` gesetzt
+
 ## [1.1.0.15] - 2026-06-17 18:21:56
 
 ### Removed

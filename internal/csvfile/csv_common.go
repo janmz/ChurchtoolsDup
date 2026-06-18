@@ -10,9 +10,15 @@ var emailColumns = []string{"email", "e-mail", "mail"}
 func normalizeHeader(header []string) []string {
 	normalized := make([]string, len(header))
 	for i, name := range header {
-		normalized[i] = strings.ToLower(strings.TrimSpace(name))
+		normalized[i] = normalizeColumnName(name)
 	}
 	return normalized
+}
+
+func normalizeColumnName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.TrimPrefix(name, "\ufeff")
+	return strings.ToLower(name)
 }
 
 func isEmptyRecord(record []string) bool {

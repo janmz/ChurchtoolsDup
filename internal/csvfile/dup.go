@@ -1,7 +1,6 @@
 package csvfile
 
 import (
-	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
@@ -78,7 +77,7 @@ func WriteDupTo(w io.Writer, entries []DupEntry) error {
 		return fmt.Errorf("bom schreiben: %w", err)
 	}
 
-	writer := csv.NewWriter(w)
+	writer := newCSVWriter(w)
 	if err := writer.Write(DupHeader); err != nil {
 		return fmt.Errorf("kopfzeile schreiben: %w", err)
 	}
@@ -109,15 +108,15 @@ func WriteDupTo(w io.Writer, entries []DupEntry) error {
 
 // ReadDup parses a duplicate CSV file.
 func ReadDup(path string) ([]DupEntry, error) {
-	file, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("csv öffnen: %w", err)
 	}
-	defer file.Close()
 
-	reader := csv.NewReader(file)
-	reader.TrimLeadingSpace = true
-	reader.FieldsPerRecord = -1
+	reader, err := newCSVReader(data)
+	if err != nil {
+		return nil, err
+	}
 
 	header, err := reader.Read()
 	if err != nil {

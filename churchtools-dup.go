@@ -10,13 +10,14 @@ package main
  * Its primary purpose is to help organizations such as churches maintain clean data and efficiently resolve duplicate entries in ChurchTools.
  *
  *
- * Version: 1.1.0.16 (in version.go zu ändern)
+ * Version: 1.1.1.17 (in version.go zu ändern)
  *
  * Author: Jan Neuhaus, VAYA Consulting, https://vaya-consulting.de/development
  *
- * Repository: https://github.com/janmz/ChurchToolsDup
+ * Repository: https://github.com/janmz/ChurchtoolsDup
  *
  * ChangeLog:
+ *  18.06.26	1.1.1	Fix: Allow more variation in the csv files
  *  17.06.26	1.1.0	Initial version on github
  *  17.06.26	1.0.0	Initial version (forked from churchtools-invite)
  *
