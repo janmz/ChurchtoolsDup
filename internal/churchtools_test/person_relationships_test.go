@@ -167,7 +167,7 @@ func TestLinkAsDuplicateSkipsExistingRelationship(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := client.LinkAsDuplicate(10005, 10006, churchtools.RelationshipType{ID: 5, Name: "Duplikat"})
+	_, err := client.LinkAsDuplicate(10005, 10006, churchtools.RelationshipType{ID: 5, Name: "Duplikat"})
 	if err != nil {
 		t.Fatalf("LinkAsDuplicate: %v", err)
 	}

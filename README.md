@@ -117,8 +117,8 @@ Set the duplicate type ID in `config.json`, e.g.:
 | `campus_id` | Default campus when user has none |
 | `permission_groups.edit_persons` | Group for import rights |
 | `permission_groups.export_persons` | Group for export |
-| `duplicate_relationship_type.id` | Relationship type ID (optional) |
-| `duplicate_relationship_type.name` | Relationship type name (optional) |
+| `duplicate_relationship_type.id` | Relationship type ID (default: **8**) |
+| `duplicate_relationship_type.name` | Relationship type name (fallback if ID 8 missing) |
 
 ## CSV format (duplicates)
 

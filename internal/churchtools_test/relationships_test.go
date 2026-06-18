@@ -22,7 +22,7 @@ func TestListRelationshipTypesUsesPersonEndpoint(t *testing.T) {
 	mux.HandleFunc("/api/person/relationshiptypes", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"data": []map[string]any{
-				{"id": 5, "name": "Duplikat"},
+				{"id": 8, "name": "Dublette"},
 			},
 		})
 	})
@@ -39,7 +39,7 @@ func TestListRelationshipTypesUsesPersonEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(types) != 1 || types[0].ID != 5 || types[0].Name != "Duplikat" {
+	if len(types) != 1 || types[0].ID != 8 || types[0].Name != "Dublette" {
 		t.Fatalf("unexpected types: %+v", types)
 	}
 
@@ -47,12 +47,12 @@ func TestListRelationshipTypesUsesPersonEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if relType.ID != 5 {
-		t.Fatalf("duplicate type id = %d", relType.ID)
+	if relType.ID != 8 {
+		t.Fatalf("duplicate type id = %d, want default 8", relType.ID)
 	}
 }
 
-func TestFindDuplicateRelationshipTypePrefersDuplikatName(t *testing.T) {
+func TestFindDuplicateRelationshipTypePrefersDefaultIDOverName(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/whoami", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -83,8 +83,8 @@ func TestFindDuplicateRelationshipTypePrefersDuplikatName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if relType.ID != 5 {
-		t.Fatalf("expected Duplikat id 5, got %d", relType.ID)
+	if relType.ID != 8 {
+		t.Fatalf("expected default id 8, got %d", relType.ID)
 	}
 }
 
@@ -115,11 +115,46 @@ func TestFindDuplicateRelationshipTypeByConfigID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	relType, err := client.FindDuplicateRelationshipType(churchtools.DuplicateRelationshipOptions{TypeID: 8})
+	relType, err := client.FindDuplicateRelationshipType(churchtools.DuplicateRelationshipOptions{TypeID: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if relType.ID != 8 {
-		t.Fatalf("expected configured id 8, got %d", relType.ID)
+	if relType.ID != 5 {
+		t.Fatalf("expected configured id 5, got %d", relType.ID)
+	}
+}
+
+func TestFindDuplicateRelationshipTypeFallsBackWithoutDefaultID(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/whoami", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"id": 1, "firstName": "A", "lastName": "B", "email": "a@example.org"},
+		})
+	})
+	mux.HandleFunc("/api/csrftoken", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": "csrf"})
+	})
+	mux.HandleFunc("/api/person/relationshiptypes", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"id": 5, "name": "Duplikat"},
+			},
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := churchtools.NewClient(server.URL, "token", "", "")
+	if err := client.Login(); err != nil {
+		t.Fatal(err)
+	}
+
+	relType, err := client.FindDuplicateRelationshipType(churchtools.DuplicateRelationshipOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if relType.ID != 5 {
+		t.Fatalf("expected fallback id 5, got %d", relType.ID)
 	}
 }

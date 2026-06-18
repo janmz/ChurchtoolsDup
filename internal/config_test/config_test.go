@@ -139,3 +139,15 @@ func TestLoadAppliesEnvInstanceName(t *testing.T) {
 		t.Fatalf("base url = %q", loaded.BaseURL)
 	}
 }
+
+func TestDuplicateRelationshipTypeIDDefaultsToEight(t *testing.T) {
+	cfg := config.Config{}
+	if got := cfg.DuplicateRelationshipTypeID(); got != 8 {
+		t.Fatalf("default id = %d, want 8", got)
+	}
+
+	cfg = config.Config{DuplicateRelType: config.DuplicateRelType{ID: 5}}
+	if got := cfg.DuplicateRelationshipTypeID(); got != 5 {
+		t.Fatalf("configured id = %d, want 5", got)
+	}
+}

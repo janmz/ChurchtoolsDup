@@ -7,6 +7,6 @@
     "export_persons": "Personen exportieren"
   },
   "duplicate_relationship_type": {
-    "name": "Duplikat"
+    "id": 8
   }
 }

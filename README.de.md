@@ -126,8 +126,8 @@ Kopiere `config.example.json` nach `config.json` oder nutze Umgebungsvariablen:
 | `campus_id` | Standard-Standort, wenn der Benutzer keinen hat |
 | `permission_groups.edit_persons` | Gruppe für Import-Rechte (Standard: Personen Administration, Fallback Personen bearbeiten) |
 | `permission_groups.export_persons` | Gruppe für Export (Standard: Personen exportieren) |
-| `duplicate_relationship_type.id` | Beziehungstyp-ID für Duplikat-Verknüpfung (optional) |
-| `duplicate_relationship_type.name` | Beziehungstyp-Name (optional, z. B. `Duplikat`) |
+| `duplicate_relationship_type.id` | Beziehungstyp-ID für Duplikat-Verknüpfung (Standard: **8**) |
+| `duplicate_relationship_type.name` | Beziehungstyp-Name (nur Fallback, wenn ID 8 fehlt) |
 
 Login-Token beschaffen:
 

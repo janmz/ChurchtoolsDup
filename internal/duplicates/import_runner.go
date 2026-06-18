@@ -11,12 +11,13 @@ import (
 
 // ImportResult describes the outcome for one duplicate group.
 type ImportResult struct {
-	DupID         int
-	Primary       int
-	Success       bool
-	Linked        int
-	AlreadyLinked int
-	Message       string
+	DupID          int
+	Primary        int
+	Success        bool
+	Linked         int
+	AlreadyLinked  int
+	Vorgemerkt     bool // dry-run: Primärperson bereits in Gruppe „Duplikate“
+	Message        string
 }
 
 // ImportOptions controls duplicate import behaviour.
@@ -74,6 +75,7 @@ func (r ImportRunner) Run(groups [][]csvfile.DupEntry, opts ImportOptions) ([]Im
 			result.Success = true
 			result.Linked = len(others) - len(alreadyLinked)
 			result.AlreadyLinked = len(alreadyLinked)
+			result.Vorgemerkt = inGroup && !r.SkipGroupAdd
 			result.Message = formatDryRunMessage(primary, others, alreadyLinked, r.groupName(), inGroup, r.SkipGroupAdd)
 			results = append(results, result)
 			continue
@@ -81,6 +83,7 @@ func (r ImportRunner) Run(groups [][]csvfile.DupEntry, opts ImportOptions) ([]Im
 
 		linked := 0
 		alreadyLinked := 0
+		inGroup := false
 		for _, entry := range group[1:] {
 			exists, err := r.Client.DuplicateRelationshipExists(primary, entry.PersonID, r.RelType)
 			if err != nil {
@@ -98,7 +101,8 @@ func (r ImportRunner) Run(groups [][]csvfile.DupEntry, opts ImportOptions) ([]Im
 				continue
 			}
 
-			if err := r.Client.LinkAsDuplicate(primary, entry.PersonID, r.RelType); err != nil {
+			created, err := r.Client.LinkAsDuplicate(primary, entry.PersonID, r.RelType)
+			if err != nil {
 				result.Message = fmt.Sprintf(
 					"Beziehung %d -> %d fehlgeschlagen: %v",
 					primary,
@@ -108,7 +112,11 @@ func (r ImportRunner) Run(groups [][]csvfile.DupEntry, opts ImportOptions) ([]Im
 				results = append(results, result)
 				goto nextGroup
 			}
-			linked++
+			if created {
+				linked++
+			} else {
+				alreadyLinked++
+			}
 			if opts.Delay > 0 {
 				time.Sleep(opts.Delay)
 			}
@@ -120,6 +128,7 @@ func (r ImportRunner) Run(groups [][]csvfile.DupEntry, opts ImportOptions) ([]Im
 			goto nextGroup
 		}
 
+		inGroup = false
 		if !r.SkipGroupAdd {
 			membership, err := r.Client.EnsurePersonInGroup(r.groupName(), primary)
 			if err != nil {
@@ -136,12 +145,18 @@ func (r ImportRunner) Run(groups [][]csvfile.DupEntry, opts ImportOptions) ([]Im
 				results = append(results, result)
 				continue
 			}
+			inGroup, err = r.Client.PersonIsInGroup(primary, r.groupName())
+			if err != nil {
+				result.Message = fmt.Sprintf("Gruppenmitgliedschaft prüfen fehlgeschlagen: %v", err)
+				results = append(results, result)
+				continue
+			}
 		}
 
 		result.Success = true
 		result.Linked = linked
 		result.AlreadyLinked = alreadyLinked
-		result.Message = formatImportMessage(primary, linked, alreadyLinked, len(group)-1)
+		result.Message = formatImportMessage(primary, linked, alreadyLinked, len(group)-1, inGroup, r.groupName(), r.SkipGroupAdd)
 		results = append(results, result)
 	nextGroup:
 	}
@@ -234,26 +249,38 @@ func formatDryRunMessage(primary int, others, alreadyLinked []int, groupName str
 	}
 }
 
-func formatImportMessage(primary, linked, alreadyLinked, total int) string {
+func formatImportMessage(primary, linked, alreadyLinked, total int, inGroup bool, groupName string, skipGroupAdd bool) string {
+	groupNote := ""
+	if !skipGroupAdd {
+		if inGroup {
+			groupNote = fmt.Sprintf("; Person %d in Gruppe %q", primary, groupName)
+		} else {
+			groupNote = fmt.Sprintf("; Person %d nicht in Gruppe %q", primary, groupName)
+		}
+	}
+
 	switch {
 	case linked > 0 && alreadyLinked > 0:
 		return fmt.Sprintf(
-			"Person %d: %d Beziehung(en) angelegt, %d bereits vorhanden",
+			"Person %d: %d Beziehung(en) angelegt, %d bereits vorhanden%s",
 			primary,
 			linked,
 			alreadyLinked,
+			groupNote,
 		)
 	case alreadyLinked == total:
 		return fmt.Sprintf(
-			"Person %d: alle %d Duplikat-Beziehung(en) bereits vorhanden",
+			"Person %d: alle %d Duplikat-Beziehung(en) bereits vorhanden%s",
 			primary,
 			alreadyLinked,
+			groupNote,
 		)
 	default:
 		return fmt.Sprintf(
-			"Person %d mit %d Dublette(n) verknüpft",
+			"Person %d mit %d Dublette(n) verknüpft%s",
 			primary,
 			linked,
+			groupNote,
 		)
 	}
 }
@@ -264,15 +291,15 @@ func PrintImportSummary(results []ImportResult) {
 	linkedTotal, existingTotal := 0, 0
 
 	for _, result := range results {
-		linkedTotal += result.Linked
-		existingTotal += result.AlreadyLinked
-
 		switch ImportResultStatus(result) {
 		case "ok":
 			ok++
+			linkedTotal += result.Linked
+			existingTotal += result.AlreadyLinked
 			fmt.Printf("OK DupID %d: %s\n", result.DupID, result.Message)
 		case "skipped":
 			skipped++
+			existingTotal += result.AlreadyLinked
 			fmt.Printf("ÜBERSPRUNGEN DupID %d: %s\n", result.DupID, result.Message)
 		default:
 			failed++
@@ -294,6 +321,9 @@ func ImportResultStatus(result ImportResult) string {
 		return "failed"
 	}
 	if result.Linked == 0 && result.AlreadyLinked > 0 {
+		return "skipped"
+	}
+	if result.Vorgemerkt {
 		return "skipped"
 	}
 	return "ok"

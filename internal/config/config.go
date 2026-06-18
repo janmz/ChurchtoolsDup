@@ -29,6 +29,17 @@ type DuplicateRelType struct {
 	Name string `json:"name,omitempty"`
 }
 
+// DefaultDuplicateRelationshipTypeID is used when duplicate_relationship_type.id is omitted.
+const DefaultDuplicateRelationshipTypeID = 8
+
+// DuplicateRelationshipTypeID returns the configured duplicate relationship type ID.
+func (c Config) DuplicateRelationshipTypeID() int {
+	if c.DuplicateRelType.ID > 0 {
+		return c.DuplicateRelType.ID
+	}
+	return DefaultDuplicateRelationshipTypeID
+}
+
 // PermissionGroups names ChurchTools groups used to request missing rights.
 type PermissionGroups struct {
 	EditPersons   string `json:"edit_persons,omitempty"`

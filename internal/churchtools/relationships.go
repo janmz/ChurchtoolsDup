@@ -24,6 +24,9 @@ type DuplicateRelationshipOptions struct {
 
 const duplicateGroupName = "Duplikate"
 
+// DefaultDuplicateRelationshipTypeID is the ChurchTools relationship type for duplicates.
+const DefaultDuplicateRelationshipTypeID = 8
+
 var duplicateRelationshipKeywords = []string{
 	"duplikat",
 	"duplicate",
@@ -150,15 +153,17 @@ func (c *Client) FindDuplicateRelationshipType(opts DuplicateRelationshipOptions
 	}
 
 	if opts.TypeID > 0 {
-		for _, relType := range types {
-			if relType.ID == opts.TypeID {
-				return relType.relationshipType(), nil
-			}
+		if relType, ok := relationshipTypeByID(types, opts.TypeID); ok {
+			return relType, nil
 		}
 		return RelationshipType{}, fmt.Errorf(
 			"Beziehungstyp mit ID %d nicht gefunden",
 			opts.TypeID,
 		)
+	}
+
+	if relType, ok := relationshipTypeByID(types, DefaultDuplicateRelationshipTypeID); ok {
+		return relType, nil
 	}
 
 	if name := strings.TrimSpace(opts.TypeName); name != "" {
@@ -178,6 +183,15 @@ func (c *Client) FindDuplicateRelationshipType(opts DuplicateRelationshipOptions
 	}
 
 	return pickDuplicateRelationshipType(types)
+}
+
+func relationshipTypeByID(types []relationshipTypeDetail, id int) (RelationshipType, bool) {
+	for _, relType := range types {
+		if relType.ID == id {
+			return relType.relationshipType(), true
+		}
+	}
+	return RelationshipType{}, false
 }
 
 func matchRelationshipTypesByName(types []relationshipTypeDetail, name string) []relationshipTypeDetail {
@@ -278,17 +292,18 @@ func formatRelationshipTypeList(types []relationshipTypeDetail) string {
 }
 
 // LinkAsDuplicate connects two persons as duplicates via relationship management.
-func (c *Client) LinkAsDuplicate(primaryID, otherID int, relType RelationshipType) error {
+// The bool is true when a new relationship was created.
+func (c *Client) LinkAsDuplicate(primaryID, otherID int, relType RelationshipType) (bool, error) {
 	if primaryID <= 0 || otherID <= 0 || primaryID == otherID {
-		return fmt.Errorf("ungültige Personen-IDs für Duplikat-Verknüpfung")
+		return false, fmt.Errorf("ungültige Personen-IDs für Duplikat-Verknüpfung")
 	}
 
 	exists, err := c.DuplicateRelationshipExists(primaryID, otherID, relType)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if exists {
-		return nil
+		return false, nil
 	}
 
 	payloads := []map[string]any{
@@ -301,13 +316,13 @@ func (c *Client) LinkAsDuplicate(primaryID, otherID int, relType RelationshipTyp
 	for _, payload := range payloads {
 		status, body, err := c.postAPI(path, payload, true)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if status == http.StatusOK || status == http.StatusCreated || status == http.StatusNoContent {
-			return nil
+			return true, nil
 		}
 		if status != http.StatusNotFound && status != http.StatusBadRequest {
-			return &APIError{
+			return false, &APIError{
 				StatusCode: status,
 				Message:    "Duplikat-Beziehung konnte nicht angelegt werden",
 				Body:       string(body),
@@ -316,9 +331,9 @@ func (c *Client) LinkAsDuplicate(primaryID, otherID int, relType RelationshipTyp
 	}
 
 	if err := c.linkAsDuplicateLegacy(primaryID, otherID, relType.ID); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return true, nil
 }
 
 func (c *Client) linkAsDuplicateLegacy(primaryID, otherID, relTypeID int) error {

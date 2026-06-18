@@ -69,7 +69,7 @@ func runDupImport() error {
 	}
 
 	relType, err := client.FindDuplicateRelationshipType(churchtools.DuplicateRelationshipOptions{
-		TypeID:   cfg.DuplicateRelType.ID,
+		TypeID:   cfg.DuplicateRelationshipTypeID(),
 		TypeName: cfg.DuplicateRelType.Name,
 	})
 	if err != nil {

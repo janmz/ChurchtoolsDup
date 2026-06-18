@@ -2,14 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
-## [1.1.1.18] - 2026-06-18 22:55:18
+## [1.1.2.21] - 2026-06-18 23:08:23
+
+### Changed
+
+- Standard-Beziehungstyp für Duplikate ist **ID 8** (nicht mehr heuristische
+  Auswahl z. B. ID 5 „noduplicate.name“); `config.example.json` entsprechend
 
 ### Fixed
 
 - Import/Dry-Run: bestehende Duplikat-Beziehungen zuverlässiger erkannt (weitere
   API-Feldvarianten, Fallback über Beziehungsnamen)
-- Dry-Run: prüft jetzt auch, ob die Primärperson bereits in der Gruppe
-  „Duplikate“ ist (statt nur „Gruppe prüfen“)
+- Dry-Run: prüft Gruppenmitgliedschaft „Duplikate“; bereits vorgemerkte DupIDs
+  zählen in der Zusammenfassung als „übersprungen“
+- Import-/Dry-Run-Zusammenfassung: „verknüpft“ nur bei tatsächlich neu angelegten
+  Beziehungen; „bereits vorhanden“ und Gruppenstatus in den Meldungen
 
 ## [1.1.0.16] - 2026-06-18 21:37:55
 
