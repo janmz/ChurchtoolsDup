@@ -60,12 +60,34 @@ func (c *Client) hasRelationshipTo(personID, relatedID, relTypeID int) (bool, er
 		if rel.RelatedPersonID != relatedID {
 			continue
 		}
-		if relTypeID > 0 && rel.RelationshipTypeID != relTypeID {
-			continue
+		if relationshipTypeMatches(rel, relTypeID) {
+			return true, nil
 		}
-		return true, nil
 	}
 	return false, nil
+}
+
+func relationshipTypeMatches(rel PersonRelationship, relTypeID int) bool {
+	if relTypeID <= 0 {
+		return true
+	}
+	if rel.RelationshipTypeID == relTypeID {
+		return true
+	}
+	if rel.RelationshipTypeID == 0 && isDuplicateRelationshipLabel(rel.Name) {
+		return true
+	}
+	return false
+}
+
+func isDuplicateRelationshipLabel(name string) bool {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	for _, keyword := range duplicateRelationshipKeywords {
+		if strings.Contains(lower, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func decodePersonRelationship(item json.RawMessage) (PersonRelationship, bool) {
@@ -75,10 +97,7 @@ func decodePersonRelationship(item json.RawMessage) (PersonRelationship, bool) {
 	}
 
 	id, _ := intFromAny(fields["id"])
-	relTypeID, _ := intFromAny(fields["relationshipTypeId"])
-	if relTypeID == 0 {
-		relTypeID, _ = intFromAny(fields["relationTypeId"])
-	}
+	relTypeID := relationshipTypeIDFromFields(fields)
 
 	relatedID := relatedPersonIDFromFields(fields)
 	if relatedID <= 0 {
@@ -98,6 +117,25 @@ func decodePersonRelationship(item json.RawMessage) (PersonRelationship, bool) {
 	}, true
 }
 
+func relationshipTypeIDFromFields(fields map[string]any) int {
+	for _, key := range []string{
+		"relationshipTypeId",
+		"relationTypeId",
+		"relationship_type_id",
+		"relation_type_id",
+	} {
+		if id, ok := intFromAny(fields[key]); ok && id > 0 {
+			return id
+		}
+	}
+	if nested, ok := fields["relationshipType"].(map[string]any); ok {
+		if id, ok := intFromAny(nested["id"]); ok && id > 0 {
+			return id
+		}
+	}
+	return 0
+}
+
 func relatedPersonIDFromFields(fields map[string]any) int {
 	for _, key := range []string{"personId", "relatedPersonId", "relativePersonId"} {
 		if id, ok := intFromAny(fields[key]); ok && id > 0 {
@@ -109,6 +147,9 @@ func relatedPersonIDFromFields(fields map[string]any) int {
 		if id, ok := personIDFromObject(relative); ok {
 			return id
 		}
+		if id, ok := personIDFromDomainIdentifier(relative["domainIdentifier"]); ok {
+			return id
+		}
 	}
 	if person, ok := fields["person"].(map[string]any); ok {
 		if id, ok := personIDFromObject(person); ok {
@@ -116,6 +157,27 @@ func relatedPersonIDFromFields(fields map[string]any) int {
 		}
 	}
 	return 0
+}
+
+func personIDFromDomainIdentifier(value any) (int, bool) {
+	text, ok := value.(string)
+	if !ok {
+		return 0, false
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0, false
+	}
+	if id, err := strconv.Atoi(text); err == nil && id > 0 {
+		return id, true
+	}
+	for _, part := range strings.Split(text, "-") {
+		part = strings.TrimSpace(part)
+		if id, err := strconv.Atoi(part); err == nil && id > 0 {
+			return id, true
+		}
+	}
+	return 0, false
 }
 
 func personIDFromObject(obj map[string]any) (int, bool) {

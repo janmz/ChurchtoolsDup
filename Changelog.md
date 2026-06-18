@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.1.1.18] - 2026-06-18 22:55:18
+
+### Fixed
+
+- Import/Dry-Run: bestehende Duplikat-Beziehungen zuverlässiger erkannt (weitere
+  API-Feldvarianten, Fallback über Beziehungsnamen)
+- Dry-Run: prüft jetzt auch, ob die Primärperson bereits in der Gruppe
+  „Duplikate“ ist (statt nur „Gruppe prüfen“)
+
 ## [1.1.0.16] - 2026-06-18 21:37:55
 
 ### Fixed

@@ -133,3 +133,25 @@ func groupIDFromAPIURL(apiURL string) (int, bool) {
 func PlainGroupName(name string) string {
 	return plainGroupName(name)
 }
+
+// PersonIsInGroup reports whether a person belongs to a group by name.
+func (c *Client) PersonIsInGroup(personID int, groupName string) (bool, error) {
+	groupName = strings.TrimSpace(groupName)
+	if personID <= 0 || groupName == "" {
+		return false, fmt.Errorf("Personen-ID oder Gruppenname fehlt")
+	}
+
+	groups, err := c.ListPersonGroups(personID)
+	if err != nil {
+		return false, err
+	}
+
+	want := strings.ToLower(groupName)
+	for _, group := range groups {
+		plain := strings.ToLower(PlainGroupName(group.Name))
+		if plain == want || strings.Contains(plain, want) {
+			return true, nil
+		}
+	}
+	return false, nil
+}

@@ -52,6 +52,87 @@ func TestDuplicateRelationshipExists(t *testing.T) {
 	}
 }
 
+func TestDuplicateRelationshipExistsNestedType(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/whoami", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"id": 1, "firstName": "A", "lastName": "B", "email": "a@example.org"},
+		})
+	})
+	mux.HandleFunc("/api/csrftoken", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": "csrf"})
+	})
+	mux.HandleFunc("/api/persons/10005/relationships", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{
+					"relationshipType": map[string]any{"id": 8},
+					"relationshipName": "Duplikat",
+					"relative": map[string]any{
+						"id": 10006,
+					},
+				},
+			},
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := churchtools.NewClient(server.URL, "token", "", "")
+	if err := client.Login(); err != nil {
+		t.Fatal(err)
+	}
+
+	exists, err := client.DuplicateRelationshipExists(10005, 10006, churchtools.RelationshipType{ID: 8, Name: "Duplikat"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		t.Fatal("expected existing duplicate relationship")
+	}
+}
+
+func TestDuplicateRelationshipExistsByNameWhenTypeMissing(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/whoami", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"id": 1, "firstName": "A", "lastName": "B", "email": "a@example.org"},
+		})
+	})
+	mux.HandleFunc("/api/csrftoken", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": "csrf"})
+	})
+	mux.HandleFunc("/api/persons/10005/relationships", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{
+					"relationshipName": "Duplikat",
+					"relative": map[string]any{
+						"domainIdentifier": "10006",
+					},
+				},
+			},
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := churchtools.NewClient(server.URL, "token", "", "")
+	if err := client.Login(); err != nil {
+		t.Fatal(err)
+	}
+
+	exists, err := client.DuplicateRelationshipExists(10005, 10006, churchtools.RelationshipType{ID: 8, Name: "Duplikat"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		t.Fatal("expected existing duplicate relationship")
+	}
+}
+
 func TestLinkAsDuplicateSkipsExistingRelationship(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/whoami", func(w http.ResponseWriter, r *http.Request) {
