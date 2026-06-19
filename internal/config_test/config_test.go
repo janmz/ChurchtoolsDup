@@ -159,7 +159,7 @@ func TestPreJoinGroupNamesDefaults(t *testing.T) {
 		"ChurchTools Admin",
 		"ChurchTools Verwaltung",
 		"Personen Administration",
-		"Personen verwaltung",
+		"Personen verwalten",
 	}
 	if len(names) != len(want) {
 		t.Fatalf("names = %v, want %v", names, want)

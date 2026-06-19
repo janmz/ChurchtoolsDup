@@ -17,17 +17,37 @@ type Group struct {
 }
 
 // FindGroups detects duplicate clusters for a campus within the full person list.
+// Only groups with at least one person at campusID are returned.
 func FindGroups(campusID int, allPersons []churchtools.Person) []Group {
 	if campusID <= 0 || len(allPersons) < 2 {
 		return nil
 	}
+	return findGroups(allPersons, campusID, true)
+}
 
+// FindAllGroups detects duplicate clusters across the full person list without
+// filtering by campus.
+func FindAllGroups(allPersons []churchtools.Person) []Group {
+	if len(allPersons) < 2 {
+		return nil
+	}
+	return findGroups(allPersons, 0, false)
+}
+
+func findGroups(allPersons []churchtools.Person, campusID int, requireCampus bool) []Group {
 	byID := make(map[int]churchtools.Person, len(allPersons))
-	campusIDs := make(map[int]struct{})
-	for _, person := range allPersons {
-		byID[person.ID] = person
-		if person.CampusID == campusID {
-			campusIDs[person.ID] = struct{}{}
+	var campusIDs map[int]struct{}
+	if requireCampus {
+		campusIDs = make(map[int]struct{})
+		for _, person := range allPersons {
+			byID[person.ID] = person
+			if person.CampusID == campusID {
+				campusIDs[person.ID] = struct{}{}
+			}
+		}
+	} else {
+		for _, person := range allPersons {
+			byID[person.ID] = person
 		}
 	}
 
@@ -43,7 +63,7 @@ func FindGroups(campusID int, allPersons []churchtools.Person) []Group {
 		if len(ids) < 2 {
 			continue
 		}
-		if !containsCampusPerson(ids, campusIDs) {
+		if requireCampus && !containsCampusPerson(ids, campusIDs) {
 			continue
 		}
 

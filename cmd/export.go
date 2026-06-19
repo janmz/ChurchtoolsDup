@@ -14,7 +14,7 @@ import (
 
 var (
 	exportOutput          string
-	exportCampus          int
+	exportCampusFlag      string
 	exportInteractive     bool
 	exportSkipPermRequest bool
 	exportSkipPreJoin     bool
@@ -36,7 +36,7 @@ func init() {
 	rootCmd.AddCommand(exportCmd)
 
 	exportCmd.Flags().StringVarP(&exportOutput, "output", "o", "duplikate.csv", "Ziel-Datei (- für stdout)")
-	exportCmd.Flags().IntVar(&exportCampus, "campus-id", 0, "Standort-ID für die Dubletten-Suche")
+	exportCmd.Flags().StringVar(&exportCampusFlag, "campus-id", "", "Standort-ID oder \"all\" für alle Standorte")
 	exportCmd.Flags().BoolVarP(&exportInteractive, "interactive", "i", false, "Standort interaktiv auswählen")
 	exportCmd.Flags().BoolVar(&exportSkipPermRequest, "skip-permission-request", false, "Keine Gruppenmitgliedschaft für fehlende Berechtigungen beantragen")
 	exportCmd.Flags().BoolVar(&exportSkipPreJoin, "skip-pre-join-groups", false, "Keine Vorab-Gruppen vor dem Export beitreten")
@@ -69,15 +69,9 @@ func runDupExport() error {
 		}
 	}
 
-	campusID := exportCampus
-	if exportInteractive || campusID <= 0 {
-		campusID, err = ensureCampusID(client, &cfg)
-		if err != nil {
-			return err
-		}
-	}
-	if campusID <= 0 {
-		return fmt.Errorf("Kein Standort gewählt – --campus-id setzen oder --interactive nutzen")
+	campusChoice, err := resolveExportCampus(client, &cfg, exportInteractive, exportCampusFlag)
+	if err != nil {
+		return err
 	}
 
 	fmt.Fprintf(os.Stderr, "Lade Gesamtbestand…\n")
@@ -89,9 +83,17 @@ func runDupExport() error {
 		return fmt.Errorf("Keine Personen gefunden")
 	}
 
-	groups := duplicates.FindGroups(campusID, allPersons)
+	var groups []duplicates.Group
+	if campusChoice.all {
+		groups = duplicates.FindAllGroups(allPersons)
+	} else {
+		groups = duplicates.FindGroups(campusChoice.campusID, allPersons)
+	}
 	if len(groups) == 0 {
-		return fmt.Errorf("keine Dubletten für Standort-ID %d gefunden", campusID)
+		if campusChoice.all {
+			return fmt.Errorf("keine Dubletten im Gesamtbestand gefunden")
+		}
+		return fmt.Errorf("keine Dubletten für Standort-ID %d gefunden", campusChoice.campusID)
 	}
 
 	campuses, err := client.ListCampuses()
@@ -107,14 +109,17 @@ func runDupExport() error {
 	}
 
 	entries := duplicates.GroupsToEntries(groups, campusNames)
-	campusName := campusDisplayName(client, campusID)
+	scopeLabel := describeExportScope(campusChoice, "")
+	if !campusChoice.all {
+		scopeLabel = describeExportScope(campusChoice, campusDisplayName(client, campusChoice.campusID))
+	}
 
 	if exportOutput == "-" {
 		if err := csvfile.WriteDupTo(os.Stdout, entries); err != nil {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "%d Zeilen (%d Dubletten) für %s exportiert\n",
-			len(entries), len(groups), describeCampus(campusID, campusName))
+			len(entries), len(groups), scopeLabel)
 		return nil
 	}
 
@@ -123,7 +128,7 @@ func runDupExport() error {
 	}
 
 	fmt.Printf("%d Zeilen (%d Dubletten) nach %s exportiert (%s)\n",
-		len(entries), len(groups), exportOutput, describeCampus(campusID, campusName))
+		len(entries), len(groups), exportOutput, scopeLabel)
 	return nil
 }
 

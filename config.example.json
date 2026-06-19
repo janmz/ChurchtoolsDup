@@ -2,7 +2,7 @@
   "base_url": "https://meine-gemeinde.church.tools",
   "login_token": "HIER_LOGIN_TOKEN_EINTRAGEN",
   "delay_ms": 500,
-  "pre_join_groups": "ChurchTools Admin,ChurchTools Verwaltung,Personen Administration,Personen verwaltung",
+  "pre_join_groups": "ChurchTools Admin,ChurchTools Verwaltung,Personen Administration,Personen verwalten",
   "permission_groups": {
     "edit_persons": "Personen Administration",
     "export_persons": "Personen exportieren"

@@ -18,6 +18,26 @@ func person(id, campus int, first, last, email, street, city string) churchtools
 	}
 }
 
+func TestFindAllGroupsAcrossCampuses(t *testing.T) {
+	all := []churchtools.Person{
+		person(1, 10, "Max", "Muster", "max@example.org", "Hauptstr. 1", "Frankfurt"),
+		person(2, 20, "Max", "Muster", "max@example.org", "Nebenweg 2", "Offenbach"),
+		person(3, 30, "Erika", "Beispiel", "erika@example.org", "Gasse 3", "Mainz"),
+	}
+
+	if groups := FindGroups(30, all); len(groups) != 0 {
+		t.Fatalf("FindGroups(30) = %d groups, want 0", len(groups))
+	}
+
+	groups := FindAllGroups(all)
+	if len(groups) != 1 {
+		t.Fatalf("FindAllGroups = %d groups, want 1", len(groups))
+	}
+	if len(groups[0].Persons) != 2 {
+		t.Fatalf("expected 2 persons, got %d", len(groups[0].Persons))
+	}
+}
+
 func TestFindGroupsIgnoresSharedEmailCouple(t *testing.T) {
 	all := []churchtools.Person{
 		person(1, 10, "Anna", "Beispiel", "paar@example.org", "Gartenweg 3", "Musterdorf"),

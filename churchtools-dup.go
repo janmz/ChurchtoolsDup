@@ -10,13 +10,14 @@ package main
  * Its primary purpose is to help organizations such as churches maintain clean data and efficiently resolve duplicate entries in ChurchTools.
  *
  *
- * Version: 1.2.0.24 (in version.go zu ändern)
+ * Version: 1.2.1.26 (in version.go zu ändern)
  *
  * Author: Jan Neuhaus, VAYA Consulting, https://vaya-consulting.de/development
  *
  * Repository: https://github.com/janmz/ChurchtoolsDup
  *
  * ChangeLog:
+ *  19.06.26	1.2.1	Fix: interactive is now really possible, add an all option for campus selection
  *  19.06.26	1.2.0	Feature: automatic registration into chain of groups
  *  18.06.26	1.1.3	Fix: counting of existing dublicate relationships
  *  18.06.26	1.1.2	Fix: --dry-run did not detect existing dublicate relationships

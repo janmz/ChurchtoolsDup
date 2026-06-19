@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.2.0.25] - 2026-06-19 11:18:05
+
+### Added
+
+- `export --campus-id all` (auch `alle`, `*`): Dublettensuche ohne
+  Standortfilter über den gesamten Bestand
+
+### Fixed
+
+- `export -i` / `--interactive`: zeigt immer eine Standortauswahl (inkl.
+  „Alle Standorte“), auch wenn am Benutzer bereits ein Standort hinterlegt ist
+
+### Changed
+
+- Standard-Vorab-Gruppe „Personen verwaltung“ → „Personen verwalten“
+- README / README.de.md: Dubletten-Matching (Regeln, Normalisierung,
+  Transitivität, Ausnahmen) ausführlicher beschrieben
+
 ## [1.1.3.23] - 2026-06-19 11:01:07
 
 ### Added
@@ -9,7 +27,7 @@ All notable changes to this project are documented in this file.
 - Vorab-Gruppen: vor Export/Import werden konfigurierte Gruppen in fester
   Reihenfolge beigetreten, wenn noch nicht Mitglied (`pre_join_groups` in
   `config.json`, Standard: ChurchTools Admin, ChurchTools Verwaltung, Personen
-  Administration, Personen verwaltung)
+  Administration, Personen verwalten)
 - `setup init` fragt die kommagetrennte Gruppenliste ab
 - Flags `--skip-pre-join-groups` für `export` und `import`
 - Umgebungsvariable `CT_PRE_JOIN_GROUPS`

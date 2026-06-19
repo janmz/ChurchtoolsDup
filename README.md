@@ -24,13 +24,53 @@ ChurchTools:
 
 ### Detection (`export`)
 
-Searches the **full person database**; at least one person per group must
-belong to the selected campus. Rules (simplified):
+Search runs across the **full person database**. By default, a group is exported
+when **at least one person** belongs to the selected campus (`--campus-id ID` or
+interactive). With `--campus-id all`, the campus filter is skipped and **all**
+duplicates in the database are exported.
 
-1. Same e-mail (except shared-mailbox couples: same e-mail and address,
-   different first name)
-2. Same first name + city + street (fuzzy matching)
-3. Same first name + last name (including swapped or variant names)
+#### Pipeline
+
+1. **E-mail phase:** persons with the same (normalized) e-mail are linked.
+2. **Name phase:** additional pairs are checked via first name, last name, city,
+   and street.
+3. **Transitivity:** overlapping pairs merge into **one DupID** (union-find). If
+   A↔B and B↔C match, A, B, and C share one group.
+
+#### When two persons count as duplicates
+
+| Rule | Condition |
+| --- | --- |
+| E-mail | Same e-mail address |
+| Address + first name | Same street, same city (fuzzy), matching first names |
+| Name | Same first and last name, including **swapped** first/last |
+
+**E-mail exception:** same e-mail, same address, **different** first names on
+the **same campus** are treated as a shared mailbox (couple, etc.) and are
+**not** linked.
+
+#### Normalization and fuzzy matching
+
+- **E-mail:** lowercased, trimmed
+- **Names:** lowercased, hyphens as spaces, punctuation ignored
+- **First names:** exact match, subset (`Jan Oliver` ↔ `Jan`), or initials
+  (`Jan O.` ↔ `Jan Oliver`)
+- **Last names:** exact match or subset for compound names (`Müller-Schmidt`
+  ↔ `Müller`)
+- **City:** main locality and suffix parsed separately; variants like
+  `Frankfurt`, `Frankfurt am Main`, `Frankfurt/M.` match; different places
+  (`Frankfurt a.d. Oder` vs. `Frankfurt am Main`) do not
+- **Street:** `ß`→`ss`, `Str.`/`Straße`/`Strasse` unified, punctuation and
+  extra spaces ignored (`Klarstr.` = `Klarstraße`)
+
+Candidates are pre-filtered with **blocking keys** (first name token + city +
+street, or first + last name) so not every person is compared to every other.
+
+#### What is not exported
+
+- Singletons with no partner in the group
+- Groups where **no** person belongs to the selected campus
+- Couples/shared mailbox (see exception above)
 
 ### Import (`import`)
 
@@ -151,8 +191,9 @@ Summary includes counts for linked vs. already existing.
 | `whoami` | User, campus, groups, instance URL |
 | `relationship-types` | List relationship types with ID and name |
 | `export -o FILE` | Export duplicate CSV (default `duplikate.csv`) |
-| `export -i` | Choose campus interactively |
+| `export -i` | Choose campus interactively (always prompts, incl. “All campuses”) |
 | `export --campus-id ID` | Campus for duplicate search |
+| `export --campus-id all` | Duplicate search across all campuses (no filter) |
 | `import -f FILE` | Import edited CSV |
 | `import -f FILE --dry-run` | Simulate without changes |
 | `import -f FILE --skip-group-add` | Do not add to group “Duplikate” |

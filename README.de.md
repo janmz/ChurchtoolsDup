@@ -29,13 +29,56 @@ strukturiert vormerken.
 
 ### Dubletten-Erkennung (`export`)
 
-Treffer werden im **gesamten Personenbestand** gesucht; mindestens ein Eintrag
-pro Gruppe muss zum gewählten Standort gehören. Erkennungsregeln (vereinfacht):
+Die Suche läuft über den **gesamten Personenbestand**. Standardmäßig wird
+exportiert, wenn **mindestens eine Person** einer Dubletten-Gruppe zum gewählten
+Standort gehört (`--campus-id ID` oder interaktiv). Mit `--campus-id all`
+entfällt der Standortfilter – es werden **alle** Dubletten im Bestand exportiert.
 
-1. Gleiche E-Mail (außer Ehepaare/gemeinsame Mailbox: gleiche E-Mail und
-   Adresse, aber unterschiedlicher Vorname)
-2. Gleicher Vorname + Stadt + Straße (mit toleranter Schreibweise)
-3. Gleicher Vorname + Nachname (inkl. vertauschter oder abweichender Namen)
+#### Ablauf
+
+1. **E-Mail-Phase:** Personen mit gleicher (normalisierter) E-Mail werden
+   verknüpft.
+2. **Namens-Phase:** Weitere Paare werden über Vorname, Nachname, Stadt und
+   Straße geprüft und bei Übereinstimmung verknüpft.
+3. **Transitivität:** Überlappende Paare werden zu **einer DupID** zusammengeführt
+   (Union-Find). Liefern A↔B und B↔C Treffer, landen A, B und C in derselben
+   Gruppe.
+
+#### Wann zwei Personen als Dublette gelten
+
+| Regel | Bedingung |
+| --- | --- |
+| E-Mail | Gleiche E-Mail-Adresse |
+| Adresse + Vorname | Gleiche Straße, gleiche Stadt (tolerant), passende Vornamen |
+| Name | Gleicher Vor- und Nachname, auch **vertauscht** (Vorname/Nachname getauscht) |
+
+**Ausnahme E-Mail:** Gleiche E-Mail, gleiche Adresse und **unterschiedliche**
+Vornamen am **selben Standort** gelten als gemeinsame Mailbox (Ehepaar o. Ä.)
+und werden **nicht** verknüpft.
+
+#### Normalisierung und Toleranz
+
+- **E-Mail:** Kleinschreibung, Leerzeichen entfernt
+- **Namen:** Kleinschreibung, Bindestriche als Leerzeichen, Satzzeichen ignoriert
+- **Vornamen:** exakt gleich, Teilmenge (`Jan Oliver` ↔ `Jan`) oder Initialen
+  (`Jan O.` ↔ `Jan Oliver`)
+- **Nachnamen:** exakt gleich oder Teilmenge bei Doppelnamen (`Müller-Schmidt`
+  ↔ `Müller`)
+- **Stadt:** Hauptort und Zusatz werden getrennt ausgewertet; Varianten wie
+  `Frankfurt`, `Frankfurt am Main`, `Frankfurt/M.` gelten als gleich; verschiedene
+  Orte (`Frankfurt a.d. Oder` vs. `Frankfurt am Main`) nicht
+- **Straße:** `ß`→`ss`, `Str.`/`Straße`/`Strasse` vereinheitlicht, Satzzeichen
+  und Mehrfach-Leerzeichen ignoriert (`Klarstr.` = `Klarstraße`)
+
+Zum Prüfen im Gesamtbestand werden Kandidaten über **Blocking-Keys** vorfiltert
+(erstes Vorname-Token + Stadt + Straße bzw. Vor- + Nachname), damit nicht jede
+Person mit jeder verglichen wird.
+
+#### Was nicht exportiert wird
+
+- Einzelpersonen ohne Partner in der Gruppe
+- Gruppen, in denen **keine** Person zum gewählten Standort gehört
+- Ehepaare/gemeinsame Mailbox (siehe Ausnahme oben)
 
 ### Import (`import`)
 
@@ -178,8 +221,9 @@ Zusammenfassung mit Anzahl verknüpft / bereits vorhanden.
 | `whoami` | Angemeldeter Benutzer, Standort, Gruppen, Instanz-URL |
 | `relationship-types` | Beziehungstypen mit ID und Name auflisten |
 | `export -o DATEI` | Dubletten-CSV exportieren (Standard: `duplikate.csv`, `-` = stdout) |
-| `export -i` | Standort interaktiv wählen |
+| `export -i` | Standort interaktiv wählen (immer Menü, inkl. „Alle Standorte“) |
 | `export --campus-id ID` | Dubletten-Suche für diesen Standort |
+| `export --campus-id all` | Dubletten-Suche über alle Standorte (ohne Filter) |
 | `export --skip-permission-request` | Keine Gruppenanfrage bei fehlenden Export-Rechten |
 | `export --skip-pre-join-groups` | Keine Vorab-Gruppen vor dem Export beitreten |
 | `import -f DATEI` | Bearbeitete CSV importieren |
