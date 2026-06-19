@@ -124,6 +124,8 @@ Kopiere `config.example.json` nach `config.json` oder nutze Umgebungsvariablen:
 | `CT_USERNAME` / `CT_PASSWORD` | Alternative zum Token |
 | `delay_ms` | Pause zwischen API-Aufrufen in Millisekunden (Standard: 500) |
 | `campus_id` | Standard-Standort, wenn der Benutzer keinen hat |
+| `pre_join_groups` | Kommagetrennte Gruppen, denen vor Export/Import in dieser Reihenfolge beigetreten wird (Standard siehe `config.example.json`; `-` zum Deaktivieren) |
+| `CT_PRE_JOIN_GROUPS` | Umgebungsvariable für `pre_join_groups` |
 | `permission_groups.edit_persons` | Gruppe für Import-Rechte (Standard: Personen Administration, Fallback Personen bearbeiten) |
 | `permission_groups.export_persons` | Gruppe für Export (Standard: Personen exportieren) |
 | `duplicate_relationship_type.id` | Beziehungstyp-ID für Duplikat-Verknüpfung (Standard: **8**) |
@@ -179,11 +181,13 @@ Zusammenfassung mit Anzahl verknüpft / bereits vorhanden.
 | `export -i` | Standort interaktiv wählen |
 | `export --campus-id ID` | Dubletten-Suche für diesen Standort |
 | `export --skip-permission-request` | Keine Gruppenanfrage bei fehlenden Export-Rechten |
+| `export --skip-pre-join-groups` | Keine Vorab-Gruppen vor dem Export beitreten |
 | `import -f DATEI` | Bearbeitete CSV importieren |
 | `import -f DATEI --dry-run` | Prüfen ohne Änderungen in ChurchTools |
 | `import -f DATEI --delay-ms MS` | Pause zwischen API-Aufrufen |
 | `import -f DATEI --skip-group-add` | Gruppe „Duplikate“ nicht befüllen |
 | `import -f DATEI --skip-permission-request` | Keine Gruppenanfrage bei fehlenden Rechten |
+| `import -f DATEI --skip-pre-join-groups` | Keine Vorab-Gruppen vor dem Import beitreten |
 
 ## Entwicklung
 

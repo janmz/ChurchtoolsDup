@@ -122,6 +122,15 @@ func runSetupInit() error {
 		}
 	}
 
+	fmt.Printf("Gruppen vor Export/Import (kommagetrennt) [%s]: ", config.DefaultPreJoinGroups)
+	preJoinInput, _ := reader.ReadString('\n')
+	preJoinInput = strings.TrimSpace(preJoinInput)
+	if preJoinInput != "" {
+		cfg.PreJoinGroups = preJoinInput
+	} else {
+		cfg.PreJoinGroups = config.DefaultPreJoinGroups
+	}
+
 	if err := config.Save(configPath, cfg); err != nil {
 		return err
 	}

@@ -19,6 +19,7 @@ type Config struct {
 	Password         string           `json:"password,omitempty"`
 	DelayMS          int              `json:"delay_ms,omitempty"`
 	CampusID         int              `json:"campus_id,omitempty"`
+	PreJoinGroups    string           `json:"pre_join_groups,omitempty"`
 	PermissionGroups PermissionGroups `json:"permission_groups,omitempty"`
 	DuplicateRelType DuplicateRelType `json:"duplicate_relationship_type,omitempty"`
 }
@@ -53,6 +54,36 @@ var defaultEditPersonsGroups = []string{
 
 var defaultExportPersonsGroups = []string{
 	"Personen exportieren",
+}
+
+// DefaultPreJoinGroups is the comma-separated list of groups joined before export/import.
+const DefaultPreJoinGroups = "ChurchTools Admin,ChurchTools Verwaltung,Personen Administration,Personen verwaltung"
+
+// ParseCommaSeparatedNames splits a comma-separated list and trims empty entries.
+func ParseCommaSeparatedNames(raw string) []string {
+	parts := strings.Split(raw, ",")
+	names := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		names = append(names, part)
+	}
+	return names
+}
+
+// PreJoinGroupNames returns groups to join in order before export/import.
+// Set pre_join_groups to "-" or "none" to disable.
+func (c Config) PreJoinGroupNames() []string {
+	raw := strings.TrimSpace(c.PreJoinGroups)
+	if raw == "-" || strings.EqualFold(raw, "none") {
+		return nil
+	}
+	if raw == "" {
+		return ParseCommaSeparatedNames(DefaultPreJoinGroups)
+	}
+	return ParseCommaSeparatedNames(raw)
 }
 
 // EditPersonsGroupNames returns candidate groups for write/admin permissions.
@@ -162,6 +193,9 @@ func (c *Config) applyEnv() {
 	}
 	if v := strings.TrimSpace(os.Getenv("CT_PASSWORD")); v != "" {
 		c.Password = v
+	}
+	if v := strings.TrimSpace(os.Getenv("CT_PRE_JOIN_GROUPS")); v != "" {
+		c.PreJoinGroups = v
 	}
 }
 

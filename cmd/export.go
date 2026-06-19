@@ -17,6 +17,7 @@ var (
 	exportCampus          int
 	exportInteractive     bool
 	exportSkipPermRequest bool
+	exportSkipPreJoin     bool
 )
 
 var exportCmd = &cobra.Command{
@@ -38,6 +39,7 @@ func init() {
 	exportCmd.Flags().IntVar(&exportCampus, "campus-id", 0, "Standort-ID für die Dubletten-Suche")
 	exportCmd.Flags().BoolVarP(&exportInteractive, "interactive", "i", false, "Standort interaktiv auswählen")
 	exportCmd.Flags().BoolVar(&exportSkipPermRequest, "skip-permission-request", false, "Keine Gruppenmitgliedschaft für fehlende Berechtigungen beantragen")
+	exportCmd.Flags().BoolVar(&exportSkipPreJoin, "skip-pre-join-groups", false, "Keine Vorab-Gruppen vor dem Export beitreten")
 }
 
 func runDupExport() error {
@@ -53,6 +55,12 @@ func runDupExport() error {
 	client, err := connectChurchTools(cfg)
 	if err != nil {
 		return err
+	}
+
+	if !exportSkipPreJoin {
+		if err := ensurePreJoinGroups(client, cfg); err != nil {
+			return err
+		}
 	}
 
 	if !exportSkipPermRequest {

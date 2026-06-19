@@ -151,3 +151,42 @@ func TestDuplicateRelationshipTypeIDDefaultsToEight(t *testing.T) {
 		t.Fatalf("configured id = %d, want 5", got)
 	}
 }
+
+func TestPreJoinGroupNamesDefaults(t *testing.T) {
+	cfg := config.Config{}
+	names := cfg.PreJoinGroupNames()
+	want := []string{
+		"ChurchTools Admin",
+		"ChurchTools Verwaltung",
+		"Personen Administration",
+		"Personen verwaltung",
+	}
+	if len(names) != len(want) {
+		t.Fatalf("names = %v, want %v", names, want)
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Fatalf("names[%d] = %q, want %q", i, names[i], want[i])
+		}
+	}
+}
+
+func TestPreJoinGroupNamesCustomAndDisabled(t *testing.T) {
+	cfg := config.Config{PreJoinGroups: "Gruppe A, Gruppe B"}
+	names := cfg.PreJoinGroupNames()
+	if len(names) != 2 || names[0] != "Gruppe A" || names[1] != "Gruppe B" {
+		t.Fatalf("custom names = %v", names)
+	}
+
+	cfg = config.Config{PreJoinGroups: "-"}
+	if got := cfg.PreJoinGroupNames(); got != nil {
+		t.Fatalf("disabled = %v, want nil", got)
+	}
+}
+
+func TestParseCommaSeparatedNames(t *testing.T) {
+	names := config.ParseCommaSeparatedNames(" A , , B ")
+	if len(names) != 2 || names[0] != "A" || names[1] != "B" {
+		t.Fatalf("names = %v", names)
+	}
+}

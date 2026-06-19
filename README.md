@@ -115,6 +115,8 @@ Set the duplicate type ID in `config.json`, e.g.:
 | `CT_USERNAME` / `CT_PASSWORD` | Alternative to token |
 | `delay_ms` | Delay between API calls in ms (default: 500) |
 | `campus_id` | Default campus when user has none |
+| `pre_join_groups` | Comma-separated groups to join in order before export/import (default in `config.example.json`; set `-` to disable) |
+| `CT_PRE_JOIN_GROUPS` | Environment override for `pre_join_groups` |
 | `permission_groups.edit_persons` | Group for import rights |
 | `permission_groups.export_persons` | Group for export |
 | `duplicate_relationship_type.id` | Relationship type ID (default: **8**) |
@@ -155,6 +157,8 @@ Summary includes counts for linked vs. already existing.
 | `import -f FILE --dry-run` | Simulate without changes |
 | `import -f FILE --skip-group-add` | Do not add to group “Duplikate” |
 | `import -f FILE --skip-permission-request` | Skip group membership requests |
+| `export --skip-pre-join-groups` | Skip pre-join groups before export |
+| `import -f FILE --skip-pre-join-groups` | Skip pre-join groups before import |
 
 ## Development
 

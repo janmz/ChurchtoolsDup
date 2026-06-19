@@ -18,6 +18,7 @@ var (
 	importDelayMS           int
 	importSkipPermRequest   bool
 	importSkipGroupAdd      bool
+	importSkipPreJoin       bool
 )
 
 var importCmd = &cobra.Command{
@@ -39,6 +40,7 @@ func init() {
 	importCmd.Flags().IntVar(&importDelayMS, "delay-ms", 0, "Pause zwischen API-Aufrufen (0 = config.delay_ms)")
 	importCmd.Flags().BoolVar(&importSkipPermRequest, "skip-permission-request", false, "Keine Gruppenmitgliedschaft für fehlende Berechtigungen beantragen")
 	importCmd.Flags().BoolVar(&importSkipGroupAdd, "skip-group-add", false, "Personen nicht in die Gruppe Duplikate aufnehmen")
+	importCmd.Flags().BoolVar(&importSkipPreJoin, "skip-pre-join-groups", false, "Keine Vorab-Gruppen vor dem Import beitreten")
 	_ = importCmd.MarkFlagRequired("csv")
 }
 
@@ -60,6 +62,12 @@ func runDupImport() error {
 	client, err := connectChurchTools(cfg)
 	if err != nil {
 		return err
+	}
+
+	if !importSkipPreJoin {
+		if err := ensurePreJoinGroups(client, cfg); err != nil {
+			return err
+		}
 	}
 
 	if !importSkipPermRequest {

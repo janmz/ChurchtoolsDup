@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.1.3.23] - 2026-06-19 11:01:07
+
+### Added
+
+- Vorab-Gruppen: vor Export/Import werden konfigurierte Gruppen in fester
+  Reihenfolge beigetreten, wenn noch nicht Mitglied (`pre_join_groups` in
+  `config.json`, Standard: ChurchTools Admin, ChurchTools Verwaltung, Personen
+  Administration, Personen verwaltung)
+- `setup init` fragt die kommagetrennte Gruppenliste ab
+- Flags `--skip-pre-join-groups` für `export` und `import`
+- Umgebungsvariable `CT_PRE_JOIN_GROUPS`
+
 ## [1.1.2.21] - 2026-06-18 23:08:23
 
 ### Changed
