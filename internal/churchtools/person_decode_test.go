@@ -13,8 +13,8 @@ func TestDecodePersonAcceptedSecurityCamelCase(t *testing.T) {
 	if person.AcceptedSecurity == nil || *person.AcceptedSecurity != "2024-01-15" {
 		t.Fatalf("AcceptedSecurity = %v", person.AcceptedSecurity)
 	}
-	if person.ConsentDate() != "15.01.2024" {
-		t.Fatalf("ConsentDate = %q", person.ConsentDate())
+	if person.ExportStatusLabel() != "Registriert" {
+		t.Fatalf("ExportStatusLabel = %q", person.ExportStatusLabel())
 	}
 }
 
@@ -42,8 +42,8 @@ func TestDecodePersonPrivacyPolicyAgreementArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if person.ConsentDate() != "01.05.2024" {
-		t.Fatalf("ConsentDate = %q", person.ConsentDate())
+	if person.ExportStatusLabel() != "Registriert" {
+		t.Fatalf("ExportStatusLabel = %q", person.ExportStatusLabel())
 	}
 }
 

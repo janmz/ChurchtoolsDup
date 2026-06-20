@@ -51,7 +51,7 @@ ChurchTools-shaped JSON).
 | --- | --- | --- |
 | API client | `internal/churchtools`, `internal/churchtools_test` | Login, CSRF, persons, relationships, campuses/groups, permissions, pagination |
 | OAuth / sub-instances | `internal/churchtools` | Central login, redirect chain, sub-instance session |
-| Person JSON | `internal/churchtools` | Legacy fields, privacy consent, addresses |
+| Person JSON | `internal/churchtools` | Legacy fields, invitation status, addresses |
 | Duplicates | `internal/duplicates` | Matcher, import, CSV mapping |
 | Configuration | `internal/config_test` | Load/save, env overrides, validation |
 | CSV | `internal/csvfile_test` | Duplicate CSV read/write |

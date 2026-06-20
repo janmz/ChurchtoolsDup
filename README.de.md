@@ -199,13 +199,15 @@ OAuth-Übergang (siehe englische README oder `setup init`). API-Aufrufe laufen
 ## CSV-Format (Dubletten)
 
 ```csv
-DupID,ID,Vorname,Nachname,E-Mail,Straße,Stadt,Standort,Erstellungsdatum,Einwilligungsdatum
-1,10001,Anna,Beispiel,anna.beispiel@example.org,Lindenweg 4,Musterstadt,Standort Nord,20.05.2026,
-1,10002,Anna,Beispiel,,Lindenweg 4,Musterstadt am Main,Standort Süd,20.05.2026,
+DupID,ID,Vorname,Nachname,E-Mail,Straße,Stadt,Standort,Erstellungsdatum,Einladungsstatus
+1,10001,Anna,Beispiel,anna.beispiel@example.org,Lindenweg 4,Musterstadt,Standort Nord,20.05.2026,NEU
+1,10002,Anna,Beispiel,,Lindenweg 4,Musterstadt am Main,Standort Süd,20.05.2026,Registriert
 ```
 
 - **DupID** – Gruppennummer; alle Zeilen mit gleicher DupID gehören zusammen
 - **ID** – ChurchTools-Personen-ID (Pflicht)
+- **Einladungsstatus** – `NEU`, `Eingeladen` oder `Registriert` (aus ChurchTools
+  `invitationStatus` und Kontometadaten)
 - Weitere Spalten zur manuellen Prüfung; beim Import maßgeblich sind DupID und ID
 - Zeilen einer DupID löschen, um Treffer zu verwerfen
 - **Erster Eintrag** einer DupID wird beim Import zum Original

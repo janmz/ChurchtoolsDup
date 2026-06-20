@@ -46,22 +46,13 @@ func TestEnrichPersonFieldsNestedAddress(t *testing.T) {
 	}
 }
 
-func TestConsentDateFallbackAcceptedSecurity(t *testing.T) {
-	security := "2021-08-01"
-	person := Person{AcceptedSecurity: &security}
-	if got := person.ConsentDate(); got != "01.08.2021" {
-		t.Fatalf("ConsentDate = %q", got)
-	}
-}
-
-func TestMergePersonDetails(t *testing.T) {
-	date := "2024-05-01"
+func TestMergePersonDetailsInvitationStatus(t *testing.T) {
 	base := Person{ID: 1, FirstName: "Max", City: "Alt"}
 	detail := Person{
-		ID:                     1,
-		Email:                  "max@example.org",
-		CreatedAt:              "2020-01-01",
-		PrivacyPolicyAgreement: &PrivacyPolicyAgreement{Date: &date},
+		ID:               1,
+		Email:            "max@example.org",
+		InvitationStatus: "pending",
+		CreatedAt:        "2020-01-01",
 	}
 
 	merged := MergePersonDetails(base, detail)
@@ -71,8 +62,8 @@ func TestMergePersonDetails(t *testing.T) {
 	if merged.CreatedAt != "2020-01-01" {
 		t.Fatalf("CreatedAt = %q", merged.CreatedAt)
 	}
-	if merged.ConsentDate() != "01.05.2024" {
-		t.Fatalf("ConsentDate = %q", merged.ConsentDate())
+	if merged.ExportStatusLabel() != "Eingeladen" {
+		t.Fatalf("ExportStatusLabel = %q", merged.ExportStatusLabel())
 	}
 	if merged.City != "Alt" {
 		t.Fatalf("City = %q", merged.City)
@@ -88,8 +79,8 @@ func TestPrivacyPolicyAgreementArrayDecodingInDecodePerson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if person.ConsentDate() != "01.05.2024" {
-		t.Fatalf("ConsentDate = %q", person.ConsentDate())
+	if person.ExportStatusLabel() != "Registriert" {
+		t.Fatalf("ExportStatusLabel = %q", person.ExportStatusLabel())
 	}
 }
 
@@ -112,8 +103,8 @@ func TestEnrichPersonFieldsSampleWithoutConsent(t *testing.T) {
 	if person.CreatedAt != "20.05.2026" {
 		t.Fatalf("CreatedAt = %q", person.CreatedAt)
 	}
-	if person.ConsentDate() != "" {
-		t.Fatalf("ConsentDate = %q, want empty for empty privacyPolicyAgreement", person.ConsentDate())
+	if person.ExportStatusLabel() != "NEU" {
+		t.Fatalf("ExportStatusLabel = %q, want NEU for empty privacyPolicyAgreement", person.ExportStatusLabel())
 	}
 }
 

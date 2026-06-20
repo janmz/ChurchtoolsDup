@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.2.3.30] - 2026-06-20 13:35:37
+
+### Changed
+
+- Dubletten-CSV: Spalte `Einwilligungsdatum` durch `Einladungsstatus` ersetzt
+  (Werte `NEU`, `Eingeladen`, `Registriert` wie in ChurchToolsInvite aus
+  `invitationStatus` und Kontometadaten)
+- Personenanreicherung übernimmt Einladungs-/Kontofelder für den Export
+
+### Removed
+
+- `ConsentDate()` und die bisher leere Spalte `Einwilligungsdatum`
+
 ## [1.2.2.28] - 2026-06-20 13:23:29
 
 ### Fixed

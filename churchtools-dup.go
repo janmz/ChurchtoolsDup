@@ -10,13 +10,14 @@ package main
  * Its primary purpose is to help organizations such as churches maintain clean data and efficiently resolve duplicate entries in ChurchTools.
  *
  *
- * Version: 1.2.3.29 (in version.go zu ändern)
+ * Version: 1.2.4.31 (in version.go zu ändern)
  *
  * Author: Jan Neuhaus, VAYA Consulting, https://vaya-consulting.de/development
  *
  * Repository: https://github.com/janmz/ChurchtoolsDup
  *
  * ChangeLog:
+ *  20.06.26	1.2.4	Fix: replace non working invitationdate with invitation status
  *  20.06.26	1.2.3	Fixes: auto-signup of groups will be used, pre_join_groups corrected, --campus instead of --campus-id with optional string search insteed of only id search
  *  19.06.26	1.2.1	Fix: interactive is now really possible, add an all option for campus selection
  *  19.06.26	1.2.0	Feature: automatic registration into chain of groups

@@ -223,17 +223,6 @@ func intFromFlexibleField(raw json.RawMessage) (int, bool) {
 	return 0, false
 }
 
-// ConsentDate returns the privacy policy agreement date or empty string.
-func (p Person) ConsentDate() string {
-	if p.PrivacyPolicyAgreement != nil && hasStringValue(p.PrivacyPolicyAgreement.Date) {
-		return FormatExportDate(*p.PrivacyPolicyAgreement.Date)
-	}
-	if hasStringValue(p.AcceptedSecurity) {
-		return FormatExportDate(*p.AcceptedSecurity)
-	}
-	return ""
-}
-
 // PrimaryEmail returns the default e-mail address for duplicate matching.
 func (p Person) PrimaryEmail() string {
 	email := strings.TrimSpace(p.Email)

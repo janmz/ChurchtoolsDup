@@ -23,7 +23,7 @@ var DupHeader = []string{
 	"Stadt",
 	"Standort",
 	"Erstellungsdatum",
-	"Einwilligungsdatum",
+	"Einladungsstatus",
 }
 
 // DupEntry is one row in a duplicate CSV file.
@@ -36,9 +36,9 @@ type DupEntry struct {
 	Email       string
 	Street      string
 	City        string
-	CampusName  string
-	CreatedAt   string
-	ConsentDate string
+	CampusName       string
+	CreatedAt        string
+	InvitationStatus string
 }
 
 // DupEntryFromPerson maps a ChurchTools person to a duplicate export row.
@@ -52,8 +52,8 @@ func DupEntryFromPerson(dupID int, person churchtools.Person, campusName string)
 		Street:      person.Street,
 		City:        person.City,
 		CampusName:  campusName,
-		CreatedAt:   churchtools.FormatExportDate(person.CreatedAt),
-		ConsentDate: person.ConsentDate(),
+		CreatedAt:        churchtools.FormatExportDate(person.CreatedAt),
+		InvitationStatus: person.ExportStatusLabel(),
 	}
 }
 
@@ -93,7 +93,7 @@ func WriteDupTo(w io.Writer, entries []DupEntry) error {
 			entry.City,
 			entry.CampusName,
 			entry.CreatedAt,
-			entry.ConsentDate,
+			entry.InvitationStatus,
 		}); err != nil {
 			return fmt.Errorf("zeile schreiben: %w", err)
 		}
@@ -215,8 +215,8 @@ func mapDupColumns(header []string) map[string]int {
 	if col, ok := findColumn(index, []string{"erstellungsdatum", "created_at", "createdat"}); ok {
 		result["created_at"] = col
 	}
-	if col, ok := findColumn(index, []string{"einwilligungsdatum", "consent_date", "einwilligung"}); ok {
-		result["consent_date"] = col
+	if col, ok := findColumn(index, []string{"einladungsstatus", "invitation_status", "status"}); ok {
+		result["invitation_status"] = col
 	}
 	return result
 }
@@ -266,8 +266,8 @@ func parseDupRecord(line int, record []string, index map[string]int) (DupEntry, 
 	if col, ok := index["created_at"]; ok {
 		entry.CreatedAt = strings.TrimSpace(fieldAt(record, col))
 	}
-	if col, ok := index["consent_date"]; ok {
-		entry.ConsentDate = strings.TrimSpace(fieldAt(record, col))
+	if col, ok := index["invitation_status"]; ok {
+		entry.InvitationStatus = strings.TrimSpace(fieldAt(record, col))
 	}
 	return entry, nil
 }

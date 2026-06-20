@@ -35,6 +35,21 @@ func MergePersonDetails(base, detail Person) Person {
 	if strings.TrimSpace(detail.CreatedAt) != "" {
 		result.CreatedAt = detail.CreatedAt
 	}
+	if strings.TrimSpace(detail.InvitationStatus) != "" {
+		result.InvitationStatus = detail.InvitationStatus
+	}
+	if detail.IsSystemUser != nil {
+		result.IsSystemUser = detail.IsSystemUser
+	}
+	if detail.IsAllowedToLogin != nil {
+		result.IsAllowedToLogin = detail.IsAllowedToLogin
+	}
+	if strings.TrimSpace(detail.CMSUserID) != "" {
+		result.CMSUserID = detail.CMSUserID
+	}
+	if hasStringValue(detail.LastLogin) {
+		result.LastLogin = detail.LastLogin
+	}
 	if detail.PrivacyPolicyAgreement != nil && hasStringValue(detail.PrivacyPolicyAgreement.Date) {
 		result.PrivacyPolicyAgreement = detail.PrivacyPolicyAgreement
 	}

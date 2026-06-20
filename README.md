@@ -173,11 +173,13 @@ Set the duplicate type ID in `config.json`, e.g.:
 ## CSV format (duplicates)
 
 ```csv
-DupID,ID,Vorname,Nachname,E-Mail,Straße,Stadt,Standort,Erstellungsdatum,Einwilligungsdatum
+DupID,ID,Vorname,Nachname,E-Mail,Straße,Stadt,Standort,Erstellungsdatum,Einladungsstatus
 ```
 
 - **DupID** – group id; rows with the same DupID belong together
 - **ID** – ChurchTools person id (required)
+- **Einladungsstatus** – `NEU`, `Eingeladen`, or `Registriert` (from ChurchTools
+  `invitationStatus` and account metadata)
 - Delete rows to discard matches; **first row** per DupID is the import primary
 
 ### Import output

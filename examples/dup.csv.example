@@ -1,7 +1,7 @@
-DupID,ID,Vorname,Nachname,E-Mail,Straße,Stadt,Standort,Erstellungsdatum,Einwilligungsdatum
-1,10001,Anna,Beispiel,anna.beispiel@example.org,Lindenweg 4,Musterstadt,Standort Nord,20.05.2026,
-1,10002,Anna,Beispiel,,Lindenweg 4,Musterstadt am Main,Standort Süd,20.05.2026,
-2,10003,Max,Muster,max.muster@example.org,Hauptstr. 12,Musterstadt,Standort Nord,20.05.2026,
-2,10004,Max,Muster,max@example.org,,,Unbestimmt,17.06.2026,
-3,10005,Erika,Probe,erika.probe@example.org,Bahnhofstr. 7,Musterstadt,Standort Nord,20.05.2026,
-3,10006,Erika,Probe,erika.probe@example.org,,,Unbestimmt,14.06.2026,
+DupID,ID,Vorname,Nachname,E-Mail,Straße,Stadt,Standort,Erstellungsdatum,Einladungsstatus
+1,10001,Anna,Beispiel,anna.beispiel@example.org,Lindenweg 4,Musterstadt,Standort Nord,20.05.2026,NEU
+1,10002,Anna,Beispiel,,Lindenweg 4,Musterstadt am Main,Standort Süd,20.05.2026,Registriert
+2,10003,Max,Muster,max.muster@example.org,Hauptstr. 12,Musterstadt,Standort Nord,20.05.2026,Eingeladen
+2,10004,Max,Muster,max@example.org,,,Unbestimmt,17.06.2026,NEU
+3,10005,Erika,Probe,erika.probe@example.org,Bahnhofstr. 7,Musterstadt,Standort Nord,20.05.2026,NEU
+3,10006,Erika,Probe,erika.probe@example.org,,,Unbestimmt,14.06.2026,Registriert

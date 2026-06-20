@@ -27,7 +27,7 @@ var exportCmd = &cobra.Command{
 	Long: `Lädt alle Personen aus ChurchTools und sucht Dubletten für den gewählten
 Standort. Treffer können auch ohne Standort oder mit anderem Standort zugeordnet
 sein. Die CSV enthält DupID, ID, Vorname, Nachname, E-Mail, Straße, Stadt,
-Standort, Erstellungsdatum und Einwilligungsdatum.`,
+Standort, Erstellungsdatum und Einladungsstatus (NEU, Eingeladen, Registriert).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		exitOnError(runDupExport())
 	},

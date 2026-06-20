@@ -51,7 +51,7 @@ Mock-Server mit ChurchTools-ähnlichen JSON-Antworten).
 | --- | --- | --- |
 | API-Client | `internal/churchtools`, `internal/churchtools_test` | Login, CSRF, Personen laden, Beziehungen, Campus/Gruppen, Berechtigungen, Paginierung |
 | OAuth / Nebeninstanzen | `internal/churchtools` | Zentral-Login, Redirect-Kette, Sub-Instanz-Session |
-| Person-JSON | `internal/churchtools` | Legacy-Felder, Datenschutz-Einwilligung, Adressen |
+| Person-JSON | `internal/churchtools` | Legacy-Felder, Einladungsstatus, Adressen |
 | Dubletten | `internal/duplicates` | Matcher, Import, CSV-Zuordnung |
 | Konfiguration | `internal/config_test` | Laden/Speichern, Umgebungsvariablen, Validierung |
 | CSV | `internal/csvfile_test` | Dubletten-CSV lesen/schreiben |
