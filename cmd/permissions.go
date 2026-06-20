@@ -28,7 +28,7 @@ func ensurePreJoinGroups(client *churchtools.Client, cfg config.Config) error {
 	for _, result := range results {
 		switch {
 		case result.Skipped:
-			fmt.Fprintf(os.Stderr, "Vorab-Gruppe %q: bereits Mitglied\n", result.GroupName)
+			fmt.Fprintf(os.Stderr, "Vorab-Gruppe %q: Bereits Mitglied\n", result.GroupName)
 		case result.Status == churchtools.MembershipActive:
 			msg := result.Message
 			if msg == "" {

@@ -2,6 +2,47 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.2.2.28] - 2026-06-20 13:23:29
+
+### Fixed
+
+- `export --campus`: Standortnamen werden für die Teilstring-Suche wie der
+  Suchbegriff normalisiert (Bindestriche/Leerzeichen irrelevant)
+- Ausgabe Vorab-Gruppen: einheitlich „Bereits Mitglied“
+
+### Changed
+
+- README / README.de.md: Hinweis zu Datei-Optionen (`-o` / `-f`) bei fehlendem
+  Dateinamen
+- `EnsurePreJoinGroups`: ungenutzte `refreshSession`-Hilfsfunktion entfernt
+
+### Added
+
+- Test: `ListPersonGroups` nutzt `groupId` statt Mitgliedschafts-`id`
+
+## [1.2.2.27] - 2026-06-20 13:10:34
+
+### Fixed
+
+- `pre_join_groups`: noch unsichtbare Gruppen blockieren nicht mehr die restliche
+  Liste; nach erfolgreichem Beitritt werden vorher nicht gefundene Gruppen erneut
+  versucht
+- Gruppenbeitritt: Bei `403` auf `PUT /groups/{id}/members/{personId}` wird die
+  Web-GUI-Anmeldung über `GET /publicgroups/{id}/form`, `POST .../token` und
+  `POST .../signup` verwendet
+- `ListPersonGroups`: `groupId` statt Mitgliedschafts-`id` für die Gruppen-ID
+- `export --output` / `import --csv`: Werte wie `-i` oder `--dry-run` nach `-o`/`-f`
+  werden als fehlender Dateiname erkannt
+
+### Changed
+
+- Standard `pre_join_groups`: `ChurchTools Verwaltung,Gruppen Administration,ChurchTools Admin,Personen Administration,Personen verwalten`
+- `export --campus-id` → `--campus` (ID, eindeutiger Namens-Teilstring oder `all`);
+  `--all-campuses` als Alias für `--campus all`
+- Ohne `--campus`: Standort des angemeldeten Nutzers bzw. `campus_id` aus der
+  Config; ohne Zuordnung alle Standorte
+- `README.md` / `README.de.md`: `--campus`, `--all-campuses`, Dateinamen-Prüfung
+
 ## [1.2.0.25] - 2026-06-19 11:18:05
 
 ### Added

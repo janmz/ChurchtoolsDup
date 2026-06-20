@@ -31,8 +31,11 @@ strukturiert vormerken.
 
 Die Suche läuft über den **gesamten Personenbestand**. Standardmäßig wird
 exportiert, wenn **mindestens eine Person** einer Dubletten-Gruppe zum gewählten
-Standort gehört (`--campus-id ID` oder interaktiv). Mit `--campus-id all`
-entfällt der Standortfilter – es werden **alle** Dubletten im Bestand exportiert.
+Standort gehört (`--campus ID` oder Namens-Teilstring, oder interaktiv). Mit
+`--campus all` oder `--all-campuses` entfällt der Standortfilter – es werden
+**alle** Dubletten im Bestand exportiert. Ohne `--campus` gilt der Standort des
+angemeldeten Nutzers bzw. `campus_id` aus der Config; ohne Zuordnung alle
+Standorte.
 
 #### Ablauf
 
@@ -144,6 +147,12 @@ Original), dann Dry-Run und Import:
 
 Globale Option: `-c config.json` für einen anderen Konfigurationspfad.
 
+### Datei-Optionen (`-o` / `-f`)
+
+Fehlt der Dateiname und folgt direkt eine andere Option (z. B.
+`export -o -i` oder `import -f --dry-run`), meldet das Programm einen klaren
+Fehler statt die Option als Dateinamen zu interpretieren.
+
 ### Beziehungstyp ermitteln
 
 ```bash
@@ -222,8 +231,9 @@ Zusammenfassung mit Anzahl verknüpft / bereits vorhanden.
 | `relationship-types` | Beziehungstypen mit ID und Name auflisten |
 | `export -o DATEI` | Dubletten-CSV exportieren (Standard: `duplikate.csv`, `-` = stdout) |
 | `export -i` | Standort interaktiv wählen (immer Menü, inkl. „Alle Standorte“) |
-| `export --campus-id ID` | Dubletten-Suche für diesen Standort |
-| `export --campus-id all` | Dubletten-Suche über alle Standorte (ohne Filter) |
+| `export --campus WERT` | Standort per ID oder eindeutigem Namens-Teilstring |
+| `export --campus all` | Dubletten-Suche über alle Standorte (ohne Filter) |
+| `export --all-campuses` | Alias zu `--campus all` |
 | `export --skip-permission-request` | Keine Gruppenanfrage bei fehlenden Export-Rechten |
 | `export --skip-pre-join-groups` | Keine Vorab-Gruppen vor dem Export beitreten |
 | `import -f DATEI` | Bearbeitete CSV importieren |

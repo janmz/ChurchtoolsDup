@@ -48,6 +48,9 @@ func runDupImport() error {
 	if importCSVPath == "" {
 		return fmt.Errorf("--csv ist erforderlich")
 	}
+	if err := validatePathFlagValue("--csv", importCSVPath); err != nil {
+		return err
+	}
 
 	cfg, err := config.LoadOrEmpty(configPath)
 	if err != nil {

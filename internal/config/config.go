@@ -57,7 +57,7 @@ var defaultExportPersonsGroups = []string{
 }
 
 // DefaultPreJoinGroups is the comma-separated list of groups joined before export/import.
-const DefaultPreJoinGroups = "ChurchTools Admin,ChurchTools Verwaltung,Personen Administration,Personen verwalten"
+const DefaultPreJoinGroups = "ChurchTools Verwaltung,Gruppen Administration,ChurchTools Admin,Personen Administration,Personen verwalten"
 
 // ParseCommaSeparatedNames splits a comma-separated list and trims empty entries.
 func ParseCommaSeparatedNames(raw string) []string {

@@ -70,10 +70,11 @@ func decodeGroupReference(raw json.RawMessage) (Group, bool) {
 }
 
 func groupIDFromObject(obj map[string]any) (int, bool) {
-	if id, ok := intFromAny(obj["id"]); ok && id > 0 {
+	// Membership rows use id for the relation; groupId holds the actual group.
+	if id, ok := intFromAny(obj["groupId"]); ok && id > 0 {
 		return id, true
 	}
-	if id, ok := intFromAny(obj["groupId"]); ok && id > 0 {
+	if id, ok := intFromAny(obj["id"]); ok && id > 0 {
 		return id, true
 	}
 	if apiURL, ok := obj["apiUrl"].(string); ok {

@@ -21,14 +21,18 @@ func resolveExportCampus(
 	cfg *config.Config,
 	interactive bool,
 	campusFlag string,
+	allCampuses bool,
 ) (exportCampusChoice, error) {
-	campusFlag = strings.TrimSpace(campusFlag)
-	if campusFlag != "" {
-		return parseExportCampusFlag(campusFlag)
-	}
-
 	if interactive {
 		return promptExportCampus(client)
+	}
+	if allCampuses {
+		return exportCampusChoice{all: true}, nil
+	}
+
+	campusFlag = strings.TrimSpace(campusFlag)
+	if campusFlag != "" {
+		return parseExportCampusFlag(client, campusFlag)
 	}
 
 	campusID, err := ensureCampusID(client, cfg)
@@ -36,26 +40,73 @@ func resolveExportCampus(
 		return exportCampusChoice{}, err
 	}
 	if campusID <= 0 {
-		return exportCampusChoice{}, fmt.Errorf("Kein Standort gewählt – --campus-id setzen oder --interactive nutzen")
+		return exportCampusChoice{all: true}, nil
 	}
 	return exportCampusChoice{campusID: campusID}, nil
 }
 
-func parseExportCampusFlag(value string) (exportCampusChoice, error) {
+func parseExportCampusFlag(client *churchtools.Client, value string) (exportCampusChoice, error) {
 	value = strings.TrimSpace(value)
 	switch strings.ToLower(value) {
 	case "all", "alle", "*":
 		return exportCampusChoice{all: true}, nil
 	}
 
-	id, err := strconv.Atoi(value)
-	if err != nil {
-		return exportCampusChoice{}, fmt.Errorf("--campus-id: Zahl oder \"all\" erwartet, erhalten %q", value)
+	if id, err := strconv.Atoi(value); err == nil {
+		if id <= 0 {
+			return exportCampusChoice{}, fmt.Errorf("--campus muss positiv sein")
+		}
+		return exportCampusChoice{campusID: id}, nil
 	}
-	if id <= 0 {
-		return exportCampusChoice{}, fmt.Errorf("--campus-id muss positiv sein")
+
+	campuses, err := client.ListCampuses()
+	if err != nil {
+		return exportCampusChoice{}, err
+	}
+	id, err := matchCampusBySearch(campuses, value)
+	if err != nil {
+		return exportCampusChoice{}, err
 	}
 	return exportCampusChoice{campusID: id}, nil
+}
+
+func normalizeCampusSearch(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var b strings.Builder
+	for _, r := range value {
+		if r >= 'a' && r <= 'z' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func matchCampusBySearch(campuses []churchtools.Campus, search string) (int, error) {
+	needle := normalizeCampusSearch(search)
+	if needle == "" {
+		return 0, fmt.Errorf("--campus: leerer Suchstring")
+	}
+
+	var matches []churchtools.Campus
+	for _, campus := range campuses {
+		name := normalizeCampusSearch(campus.Name)
+		if strings.Contains(name, needle) {
+			matches = append(matches, campus)
+		}
+	}
+
+	switch len(matches) {
+	case 0:
+		return 0, fmt.Errorf("--campus: kein Standort für %q gefunden", search)
+	case 1:
+		return matches[0].ID, nil
+	default:
+		names := make([]string, len(matches))
+		for i, campus := range matches {
+			names[i] = campus.Name
+		}
+		return 0, fmt.Errorf("--campus: mehrdeutig %q (%s)", search, strings.Join(names, ", "))
+	}
 }
 
 func promptExportCampus(client *churchtools.Client) (exportCampusChoice, error) {

@@ -16,6 +16,7 @@ var (
 	exportOutput          string
 	exportCampusFlag      string
 	exportInteractive     bool
+	exportAllCampuses     bool
 	exportSkipPermRequest bool
 	exportSkipPreJoin     bool
 )
@@ -36,8 +37,9 @@ func init() {
 	rootCmd.AddCommand(exportCmd)
 
 	exportCmd.Flags().StringVarP(&exportOutput, "output", "o", "duplikate.csv", "Ziel-Datei (- für stdout)")
-	exportCmd.Flags().StringVar(&exportCampusFlag, "campus-id", "", "Standort-ID oder \"all\" für alle Standorte")
+	exportCmd.Flags().StringVar(&exportCampusFlag, "campus", "", "Standort-ID, eindeutiger Namens-Teilstring oder \"all\"")
 	exportCmd.Flags().BoolVarP(&exportInteractive, "interactive", "i", false, "Standort interaktiv auswählen")
+	exportCmd.Flags().BoolVar(&exportAllCampuses, "all-campuses", false, "Keinen Standort-Filter anwenden (Alias für --campus all)")
 	exportCmd.Flags().BoolVar(&exportSkipPermRequest, "skip-permission-request", false, "Keine Gruppenmitgliedschaft für fehlende Berechtigungen beantragen")
 	exportCmd.Flags().BoolVar(&exportSkipPreJoin, "skip-pre-join-groups", false, "Keine Vorab-Gruppen vor dem Export beitreten")
 }
@@ -45,6 +47,9 @@ func init() {
 func runDupExport() error {
 	if exportOutput == "" {
 		return fmt.Errorf("--output ist erforderlich")
+	}
+	if err := validatePathFlagValue("--output", exportOutput); err != nil {
+		return err
 	}
 
 	cfg, err := config.LoadOrEmpty(configPath)
@@ -69,7 +74,7 @@ func runDupExport() error {
 		}
 	}
 
-	campusChoice, err := resolveExportCampus(client, &cfg, exportInteractive, exportCampusFlag)
+	campusChoice, err := resolveExportCampus(client, &cfg, exportInteractive, exportCampusFlag, exportAllCampuses)
 	if err != nil {
 		return err
 	}

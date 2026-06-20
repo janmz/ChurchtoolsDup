@@ -156,8 +156,9 @@ func TestPreJoinGroupNamesDefaults(t *testing.T) {
 	cfg := config.Config{}
 	names := cfg.PreJoinGroupNames()
 	want := []string{
-		"ChurchTools Admin",
 		"ChurchTools Verwaltung",
+		"Gruppen Administration",
+		"ChurchTools Admin",
 		"Personen Administration",
 		"Personen verwalten",
 	}

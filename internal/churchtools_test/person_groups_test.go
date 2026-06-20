@@ -67,6 +67,41 @@ func TestListPersonGroups(t *testing.T) {
 	}
 }
 
+func TestListPersonGroupsUsesGroupIdNotMembershipId(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/whoami", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"id": 1, "firstName": "A", "lastName": "B", "email": "a@example.org"},
+		})
+	})
+	mux.HandleFunc("/api/csrftoken", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": "csrf"})
+	})
+	mux.HandleFunc("/api/persons/9/groups", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"id": 501, "groupId": 5, "name": "Duplikate"},
+			},
+		})
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := churchtools.NewClient(server.URL, "token", "", "")
+	if err := client.Login(); err != nil {
+		t.Fatal(err)
+	}
+
+	groups, err := client.ListPersonGroups(9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 || groups[0].ID != 5 || groups[0].Name != "Duplikate" {
+		t.Fatalf("unexpected groups: %+v", groups)
+	}
+}
+
 func TestListPersonGroupsFlatItems(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/whoami", func(w http.ResponseWriter, r *http.Request) {

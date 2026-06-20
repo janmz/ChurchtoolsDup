@@ -25,9 +25,11 @@ ChurchTools:
 ### Detection (`export`)
 
 Search runs across the **full person database**. By default, a group is exported
-when **at least one person** belongs to the selected campus (`--campus-id ID` or
-interactive). With `--campus-id all`, the campus filter is skipped and **all**
-duplicates in the database are exported.
+when **at least one person** belongs to the selected campus (`--campus ID` or name
+substring, or interactive). With `--campus all` or `--all-campuses`, the campus
+filter is skipped and **all** duplicates in the database are exported. Without
+`--campus`, your user's campus or `campus_id` from config is used; if none is
+set, all campuses apply.
 
 #### Pipeline
 
@@ -134,6 +136,12 @@ Edit the CSV (remove wrong rows; first row per DupID stays primary), then:
 
 Global option: `-c config.json` for an alternate config path.
 
+### Path flags (`-o` / `-f`)
+
+If the file name is missing and another flag follows directly (e.g.
+`export -o -i` or `import -f --dry-run`), the tool reports a clear error
+instead of treating the option as a file path.
+
 ### Relationship type
 
 ```bash
@@ -192,8 +200,9 @@ Summary includes counts for linked vs. already existing.
 | `relationship-types` | List relationship types with ID and name |
 | `export -o FILE` | Export duplicate CSV (default `duplikate.csv`) |
 | `export -i` | Choose campus interactively (always prompts, incl. “All campuses”) |
-| `export --campus-id ID` | Campus for duplicate search |
-| `export --campus-id all` | Duplicate search across all campuses (no filter) |
+| `export --campus VALUE` | Campus by ID or unique name substring; only needed for a different campus |
+| `export --campus all` | Duplicate search across all campuses (no filter) |
+| `export --all-campuses` | Alias for `--campus all` |
 | `import -f FILE` | Import edited CSV |
 | `import -f FILE --dry-run` | Simulate without changes |
 | `import -f FILE --skip-group-add` | Do not add to group “Duplikate” |
