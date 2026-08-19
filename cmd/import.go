@@ -27,8 +27,8 @@ var importCmd = &cobra.Command{
 	Long: `Liest eine Dubletten-CSV und verknüpft die verbleibenden Personen pro DupID
 über das Beziehungsmanagement als Duplikate. Der erste Eintrag jeder DupID wird
 zusätzlich in die Gruppe "Duplikate" aufgenommen.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		exitOnError(runDupImport())
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runDupImport(cmd)
 	},
 }
 
@@ -44,11 +44,11 @@ func init() {
 	_ = importCmd.MarkFlagRequired("csv")
 }
 
-func runDupImport() error {
+func runDupImport(cmd *cobra.Command) error {
 	if importCSVPath == "" {
 		return fmt.Errorf("--csv ist erforderlich")
 	}
-	if err := validatePathFlagValue("--csv", importCSVPath); err != nil {
+	if err := checkPathFlag(cmd, "--csv", importCSVPath); err != nil {
 		return err
 	}
 

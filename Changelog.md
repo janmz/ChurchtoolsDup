@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.2.4.32] - 2026-08-19 22:17:34
+
+### Fixed
+
+- CLI: Fehlende Dateinamen bei `-o`/`-f` (z. B. `export -o -i` oder `-o --help`)
+  liefern dieselbe vollständige Meldung wie unbekannte Optionen (`Error:` +
+  `Usage` + `Flags`), ohne doppelte Fehlerzeile am Ende
+
 ## [1.2.3.30] - 2026-06-20 13:35:37
 
 ### Changed

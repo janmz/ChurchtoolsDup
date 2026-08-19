@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -19,10 +20,25 @@ Nutze 'setup' für Ersteinrichtung von URL, Login-Token und Berechtigungsprüfun
 	Version: "undefined",
 }
 
+// printedCLIError marks errors whose message and usage were already written.
+type printedCLIError struct {
+	err error
+}
+
+func (e *printedCLIError) Error() string {
+	return e.err.Error()
+}
+
 // Execute runs the root command.
 func Execute(versionString string) error {
 	rootCmd.Version = versionString
-	return rootCmd.Execute()
+	configureCLIErrors(rootCmd)
+
+	err := rootCmd.Execute()
+	if err != nil {
+		printCLIError(err)
+	}
+	return err
 }
 
 func init() {
@@ -32,9 +48,36 @@ func init() {
 	rootCmd.AddCommand(setupCmd)
 }
 
+func configureCLIErrors(cmd *cobra.Command) {
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetFlagErrorFunc(reportFlagError)
+}
+
+func reportFlagError(c *cobra.Command, err error) error {
+	fmt.Fprintf(c.ErrOrStderr(), "Error: %s\n", err)
+	_ = c.Usage()
+	return &printedCLIError{err: err}
+}
+
+func printCLIError(err error) {
+	var printed *printedCLIError
+	if errors.As(err, &printed) {
+		return
+	}
+
+	var usage *flagUsageError
+	if errors.As(err, &usage) {
+		reportFlagError(usage.cmd, usage.err)
+		return
+	}
+
+	fmt.Fprintln(os.Stderr, err)
+}
+
 func exitOnError(err error) {
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		printCLIError(err)
 		os.Exit(1)
 	}
 }

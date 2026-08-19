@@ -28,8 +28,8 @@ var exportCmd = &cobra.Command{
 Standort. Treffer können auch ohne Standort oder mit anderem Standort zugeordnet
 sein. Die CSV enthält DupID, ID, Vorname, Nachname, E-Mail, Straße, Stadt,
 Standort, Erstellungsdatum und Einladungsstatus (NEU, Eingeladen, Registriert).`,
-	Run: func(cmd *cobra.Command, args []string) {
-		exitOnError(runDupExport())
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runDupExport(cmd)
 	},
 }
 
@@ -44,11 +44,11 @@ func init() {
 	exportCmd.Flags().BoolVar(&exportSkipPreJoin, "skip-pre-join-groups", false, "Keine Vorab-Gruppen vor dem Export beitreten")
 }
 
-func runDupExport() error {
+func runDupExport(cmd *cobra.Command) error {
 	if exportOutput == "" {
 		return fmt.Errorf("--output ist erforderlich")
 	}
-	if err := validatePathFlagValue("--output", exportOutput); err != nil {
+	if err := checkPathFlag(cmd, "--output", exportOutput); err != nil {
 		return err
 	}
 
