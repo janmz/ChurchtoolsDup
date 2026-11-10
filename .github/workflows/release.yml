@@ -11,21 +11,23 @@ on:
         required: true
         type: string
 
+# Read-only by default; only the release job gets write access.
 permissions:
-  contents: write
+  contents: read
 
 env:
-  GO_VERSION: "1.22"
+  # Current Go release (latest patch with security fixes) for shipped binaries.
+  GO_VERSION: "1.27"
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -52,22 +54,32 @@ jobs:
             goarch: amd64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      # User input is passed via env (never expanded into the script) and
+      # validated, so a crafted tag name cannot inject shell commands.
       - name: Resolve version
         id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ inputs.tag }}"
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
           else
             TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9A-Za-z._-]+$'; then
+            echo "Ungültiger Tag: $TAG" >&2
+            exit 1
           fi
           VERSION="${TAG#v}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -76,7 +88,9 @@ jobs:
 
       - name: Embed Windows icon
         if: matrix.goos == 'windows'
-        run: bash scripts/embed-windows-icon.sh "${{ steps.version.outputs.version }}"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash scripts/embed-windows-icon.sh "$VERSION"
 
       - name: Build
         id: build
@@ -84,6 +98,9 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_TIME: ${{ steps.version.outputs.build_time }}
         run: |
           set -euo pipefail
           BINARY="churchtools-dup"
@@ -91,10 +108,9 @@ jobs:
             BINARY="${BINARY}.exe"
           fi
 
-          TAG="${{ steps.version.outputs.tag }}"
           PACKAGE="churchtools-dup-${TAG}-${GOOS}-${GOARCH}"
           mkdir -p "dist/${PACKAGE}"
-          LDFLAGS="-s -w -X main.Version=${{ steps.version.outputs.version }} -X 'main.BuildTime=${{ steps.version.outputs.build_time }}'"
+          LDFLAGS="-s -w -X main.Version=${VERSION} -X 'main.BuildTime=${BUILD_TIME}'"
 
           go build -ldflags "$LDFLAGS" -o "dist/${PACKAGE}/${BINARY}" .
           rm -f rsrc_windows_*.syso
@@ -113,7 +129,7 @@ jobs:
           echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: churchtools-dup-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ steps.build.outputs.asset }}
@@ -122,13 +138,15 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
           merge-multiple: true
@@ -148,15 +166,24 @@ jobs:
 
       - name: Resolve release tag
         id: tag
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
           else
-            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            TAG="${GITHUB_REF#refs/tags/}"
           fi
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9A-Za-z._-]+$'; then
+            echo "Ungültiger Tag: $TAG" >&2
+            exit 1
+          fi
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           generate_release_notes: true

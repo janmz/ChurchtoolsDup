@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	churchtools "github.com/janmz/churchtools-dup/internal/churchtools"
+	"github.com/janmz/churchtools-dup/internal/fileacl"
+	"github.com/janmz/churchtools-dup/internal/iolimit"
 )
 
 // DupHeader is the canonical CSV header for duplicate export/import files.
@@ -28,14 +30,14 @@ var DupHeader = []string{
 
 // DupEntry is one row in a duplicate CSV file.
 type DupEntry struct {
-	Line        int
-	DupID       int
-	PersonID    int
-	FirstName   string
-	LastName    string
-	Email       string
-	Street      string
-	City        string
+	Line             int
+	DupID            int
+	PersonID         int
+	FirstName        string
+	LastName         string
+	Email            string
+	Street           string
+	City             string
 	CampusName       string
 	CreatedAt        string
 	InvitationStatus string
@@ -44,27 +46,31 @@ type DupEntry struct {
 // DupEntryFromPerson maps a ChurchTools person to a duplicate export row.
 func DupEntryFromPerson(dupID int, person churchtools.Person, campusName string) DupEntry {
 	return DupEntry{
-		DupID:       dupID,
-		PersonID:    person.ID,
-		FirstName:   person.FirstName,
-		LastName:    person.LastName,
-		Email:       person.PrimaryEmail(),
-		Street:      person.Street,
-		City:        person.City,
-		CampusName:  campusName,
+		DupID:            dupID,
+		PersonID:         person.ID,
+		FirstName:        person.FirstName,
+		LastName:         person.LastName,
+		Email:            person.PrimaryEmail(),
+		Street:           person.Street,
+		City:             person.City,
+		CampusName:       campusName,
 		CreatedAt:        churchtools.FormatExportDate(person.CreatedAt),
 		InvitationStatus: person.ExportStatusLabel(),
 	}
 }
 
-// WriteDup stores duplicate rows in the canonical CSV format.
+// WriteDup stores duplicate rows in the canonical CSV format. The file holds
+// personal data and is restricted to the current user.
 func WriteDup(path string, entries []DupEntry) error {
-	file, err := os.Create(path)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("csv erstellen: %w", err)
 	}
 	defer file.Close()
 
+	if err := fileacl.RestrictToOwner(path); err != nil {
+		return err
+	}
 	if err := WriteDupTo(file, entries); err != nil {
 		return err
 	}
@@ -83,17 +89,19 @@ func WriteDupTo(w io.Writer, entries []DupEntry) error {
 	}
 
 	for _, entry := range entries {
+		// Text fields come from ChurchTools (partly from public forms) and are
+		// escaped so a spreadsheet does not execute them as formulas.
 		if err := writer.Write([]string{
 			strconv.Itoa(entry.DupID),
 			strconv.Itoa(entry.PersonID),
-			entry.FirstName,
-			entry.LastName,
-			entry.Email,
-			entry.Street,
-			entry.City,
-			entry.CampusName,
-			entry.CreatedAt,
-			entry.InvitationStatus,
+			escapeFormula(entry.FirstName),
+			escapeFormula(entry.LastName),
+			escapeFormula(entry.Email),
+			escapeFormula(entry.Street),
+			escapeFormula(entry.City),
+			escapeFormula(entry.CampusName),
+			escapeFormula(entry.CreatedAt),
+			escapeFormula(entry.InvitationStatus),
 		}); err != nil {
 			return fmt.Errorf("zeile schreiben: %w", err)
 		}
@@ -108,7 +116,7 @@ func WriteDupTo(w io.Writer, entries []DupEntry) error {
 
 // ReadDup parses a duplicate CSV file.
 func ReadDup(path string) ([]DupEntry, error) {
-	data, err := os.ReadFile(path)
+	data, err := iolimit.ReadFile(path, iolimit.MaxCSVBytes)
 	if err != nil {
 		return nil, fmt.Errorf("csv öffnen: %w", err)
 	}
@@ -156,7 +164,53 @@ func ReadDup(path string) ([]DupEntry, error) {
 	if len(entries) == 0 {
 		return nil, errors.New("csv enthält keine datensätze")
 	}
+	if err := ValidateDupEntries(entries); err != nil {
+		return nil, err
+	}
 	return entries, nil
+}
+
+// ValidateDupEntries rejects files where a person appears twice: the same ID
+// twice in one DupID (copied row) or in several DupIDs (would be linked to
+// several primaries). All problems are reported with line numbers before any
+// change is made in ChurchTools.
+func ValidateDupEntries(entries []DupEntry) error {
+	type occurrence struct {
+		dupID int
+		line  int
+	}
+	byPerson := make(map[int][]occurrence)
+	order := make([]int, 0)
+	for _, entry := range entries {
+		if _, ok := byPerson[entry.PersonID]; !ok {
+			order = append(order, entry.PersonID)
+		}
+		byPerson[entry.PersonID] = append(byPerson[entry.PersonID], occurrence{entry.DupID, entry.Line})
+	}
+
+	var problems []string
+	for _, personID := range order {
+		occ := byPerson[personID]
+		if len(occ) < 2 {
+			continue
+		}
+		parts := make([]string, len(occ))
+		dupIDs := make(map[int]struct{})
+		for i, o := range occ {
+			parts[i] = fmt.Sprintf("zeile %d (DupID %d)", o.line, o.dupID)
+			dupIDs[o.dupID] = struct{}{}
+		}
+		reason := "doppelt in derselben DupID"
+		if len(dupIDs) > 1 {
+			reason = "in mehreren DupIDs"
+		}
+		problems = append(problems, fmt.Sprintf("ID %d %s: %s", personID, reason, strings.Join(parts, ", ")))
+	}
+
+	if len(problems) > 0 {
+		return fmt.Errorf("csv ungültig, jede Person darf nur einmal vorkommen:\n  %s", strings.Join(problems, "\n  "))
+	}
+	return nil
 }
 
 // GroupDupEntries groups rows by DupID preserving file order within each group.
@@ -246,28 +300,28 @@ func parseDupRecord(line int, record []string, index map[string]int) (DupEntry, 
 		PersonID: personID,
 	}
 	if col, ok := index["firstname"]; ok {
-		entry.FirstName = strings.TrimSpace(fieldAt(record, col))
+		entry.FirstName = unescapeFormula(strings.TrimSpace(fieldAt(record, col)))
 	}
 	if col, ok := index["lastname"]; ok {
-		entry.LastName = strings.TrimSpace(fieldAt(record, col))
+		entry.LastName = unescapeFormula(strings.TrimSpace(fieldAt(record, col)))
 	}
 	if col, ok := index["email"]; ok {
-		entry.Email = strings.TrimSpace(fieldAt(record, col))
+		entry.Email = unescapeFormula(strings.TrimSpace(fieldAt(record, col)))
 	}
 	if col, ok := index["street"]; ok {
-		entry.Street = strings.TrimSpace(fieldAt(record, col))
+		entry.Street = unescapeFormula(strings.TrimSpace(fieldAt(record, col)))
 	}
 	if col, ok := index["city"]; ok {
-		entry.City = strings.TrimSpace(fieldAt(record, col))
+		entry.City = unescapeFormula(strings.TrimSpace(fieldAt(record, col)))
 	}
 	if col, ok := index["campus"]; ok {
-		entry.CampusName = strings.TrimSpace(fieldAt(record, col))
+		entry.CampusName = unescapeFormula(strings.TrimSpace(fieldAt(record, col)))
 	}
 	if col, ok := index["created_at"]; ok {
-		entry.CreatedAt = strings.TrimSpace(fieldAt(record, col))
+		entry.CreatedAt = unescapeFormula(strings.TrimSpace(fieldAt(record, col)))
 	}
 	if col, ok := index["invitation_status"]; ok {
-		entry.InvitationStatus = strings.TrimSpace(fieldAt(record, col))
+		entry.InvitationStatus = unescapeFormula(strings.TrimSpace(fieldAt(record, col)))
 	}
 	return entry, nil
 }

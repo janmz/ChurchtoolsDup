@@ -135,7 +135,9 @@ func PlainGroupName(name string) string {
 	return plainGroupName(name)
 }
 
-// PersonIsInGroup reports whether a person belongs to a group by name.
+// PersonIsInGroup reports whether a person belongs to a group with exactly
+// this name (case-insensitive, HTML stripped). Substrings do not count, so
+// "Duplikate" does not match "Duplikate (alt)".
 func (c *Client) PersonIsInGroup(personID int, groupName string) (bool, error) {
 	groupName = strings.TrimSpace(groupName)
 	if personID <= 0 || groupName == "" {
@@ -147,10 +149,9 @@ func (c *Client) PersonIsInGroup(personID int, groupName string) (bool, error) {
 		return false, err
 	}
 
-	want := strings.ToLower(groupName)
+	want := groupNameKey(groupName)
 	for _, group := range groups {
-		plain := strings.ToLower(PlainGroupName(group.Name))
-		if plain == want || strings.Contains(plain, want) {
+		if groupNameKey(group.Name) == want {
 			return true, nil
 		}
 	}

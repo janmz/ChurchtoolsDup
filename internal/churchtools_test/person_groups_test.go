@@ -32,7 +32,7 @@ func TestListPersonGroups(t *testing.T) {
 				{
 					"personId": 7,
 					"group": map[string]any{
-						"title": "<span>1</span> Personen bearbeiten",
+						"title":  "<span>1</span> Personen bearbeiten",
 						"apiUrl": "/api/groups/3",
 					},
 				},

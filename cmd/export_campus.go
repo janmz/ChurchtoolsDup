@@ -7,6 +7,7 @@ import (
 
 	churchtools "github.com/janmz/churchtools-dup/internal/churchtools"
 	config "github.com/janmz/churchtools-dup/internal/config"
+	"github.com/janmz/churchtools-dup/internal/textnorm"
 )
 
 const campusMenuAll = -1
@@ -70,29 +71,34 @@ func parseExportCampusFlag(client *churchtools.Client, value string) (exportCamp
 	return exportCampusChoice{campusID: id}, nil
 }
 
+// normalizeCampusSearch folds a campus name or search term: umlauts and
+// accents are transliterated (ü → ue, é → e), letters and digits are kept,
+// spaces, hyphens and punctuation are ignored.
 func normalizeCampusSearch(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	var b strings.Builder
-	for _, r := range value {
-		if r >= 'a' && r <= 'z' {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	return textnorm.FoldAlnum(value)
 }
 
+// matchCampusBySearch finds the campus whose normalized name equals the
+// search term; without an exact match a unique substring match is used.
 func matchCampusBySearch(campuses []churchtools.Campus, search string) (int, error) {
 	needle := normalizeCampusSearch(search)
 	if needle == "" {
 		return 0, fmt.Errorf("--campus: leerer Suchstring")
 	}
 
-	var matches []churchtools.Campus
+	var exact, partial []churchtools.Campus
 	for _, campus := range campuses {
 		name := normalizeCampusSearch(campus.Name)
-		if strings.Contains(name, needle) {
-			matches = append(matches, campus)
+		switch {
+		case name == needle:
+			exact = append(exact, campus)
+		case strings.Contains(name, needle):
+			partial = append(partial, campus)
 		}
+	}
+	matches := exact
+	if len(matches) == 0 {
+		matches = partial
 	}
 
 	switch len(matches) {

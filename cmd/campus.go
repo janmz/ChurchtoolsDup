@@ -8,29 +8,8 @@ import (
 	config "github.com/janmz/churchtools-dup/internal/config"
 )
 
-func applyDefaultCampus(client *churchtools.Client, cfg *config.Config, opts *churchtools.PersonListOptions) error {
-	if opts.CampusID > 0 {
-		return nil
-	}
-
-	campusID, err := ensureCampusID(client, cfg)
-	if err != nil {
-		return err
-	}
-	if campusID <= 0 {
-		return nil
-	}
-
-	opts.CampusID = campusID
-	name := campusDisplayName(client, campusID)
-	if name != "" {
-		fmt.Fprintf(os.Stderr, "Standort automatisch: %s (ID %d)\n", name, campusID)
-	} else {
-		fmt.Fprintf(os.Stderr, "Standort automatisch: ID %d\n", campusID)
-	}
-	return nil
-}
-
+// ensureCampusID returns the campus of the logged-in user, the configured
+// campus_id or – after asking – a chosen campus that is stored as campus_id.
 func ensureCampusID(client *churchtools.Client, cfg *config.Config) (int, error) {
 	campusID, err := client.CurrentUserCampusID()
 	if err != nil {
@@ -67,7 +46,9 @@ func ensureCampusID(client *churchtools.Client, cfg *config.Config) (int, error)
 	if path == "" {
 		path = config.DefaultConfigName
 	}
-	if err := config.Save(path, *cfg); err != nil {
+	// Only campus_id is written; credentials from the environment stay out
+	// of the file.
+	if err := config.SaveCampusID(path, selectedID); err != nil {
 		return 0, err
 	}
 

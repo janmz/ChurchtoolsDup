@@ -1,6 +1,6 @@
 # ChurchTools_Dup
 
-[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://golang.org)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://golang.org)
 [![Release](https://img.shields.io/badge/Release-GitHub-0077B6)](https://github.com/janmz/ChurchToolsDup/releases)
 [![Lizenz: MIT (modifiziert)](https://img.shields.io/badge/Lizenz-MIT--Modified-blue.svg)](LICENSE)
 [![Unterstützung: CFI-Kinderhilfe](https://img.shields.io/badge/Unterstützung-CFI--Kinderhilfe-0077B6?logo=heart)](https://cfi-kinderhilfe.de/jetzt-spenden?q=VAYACTDUP)
@@ -59,6 +59,11 @@ Standorte.
 Vornamen am **selben Standort** gelten als gemeinsame Mailbox (Ehepaar o. Ä.)
 und werden **nicht** verknüpft.
 
+**Sammeladressen:** Eine E-Mail-Adresse, die mehr als 5 Personen nutzen (z. B.
+`info@…` oder ein Platzhalter), wird nicht zur Verknüpfung verwendet; der Export
+meldet sie als Hinweis auf stderr. DupIDs mit 10 oder mehr Personen erzeugen eine
+Warnung.
+
 #### Normalisierung und Toleranz
 
 - **E-Mail:** Kleinschreibung, Leerzeichen entfernt
@@ -74,14 +79,17 @@ und werden **nicht** verknüpft.
   und Mehrfach-Leerzeichen ignoriert (`Klarstr.` = `Klarstraße`)
 
 Zum Prüfen im Gesamtbestand werden Kandidaten über **Blocking-Keys** vorfiltert
-(erstes Vorname-Token + Stadt + Straße bzw. Vor- + Nachname), damit nicht jede
-Person mit jeder verglichen wird.
+(Vornamen-Initiale + Stadt + Straße bzw. Vornamen-Initiale + jedes
+Nachnamen-Token, zusätzlich mit vertauschtem Vor-/Nachnamen), damit nicht jede
+Person mit jeder verglichen wird. DupIDs werden nach der kleinsten Personen-ID
+vergeben und bleiben bei gleichem Datenbestand stabil.
 
 #### Was nicht exportiert wird
 
 - Einzelpersonen ohne Partner in der Gruppe
 - Gruppen, in denen **keine** Person zum gewählten Standort gehört
 - Ehepaare/gemeinsame Mailbox (siehe Ausnahme oben)
+- Verknüpfungen, die nur auf einer von mehr als 5 Personen genutzten E-Mail beruhen
 
 ### Import (`import`)
 
@@ -98,7 +106,7 @@ Person mit jeder verglichen wird.
 
 ## Voraussetzungen
 
-- Go 1.22+ (zum Bauen aus dem Quellcode)
+- Go 1.25+ (zum Bauen aus dem Quellcode)
 - ChurchTools-Zugang (Login-Token oder Benutzername/Passwort)
 - **Export:** Berechtigung **export data** (Gruppe „Personen exportieren“)
 - **Import:** Berechtigung **edit relations** (Gruppe „Personen Administration“
@@ -171,7 +179,8 @@ Kopiere `config.example.json` nach `config.json` oder nutze Umgebungsvariablen:
 
 | Variable / Feld | Beschreibung |
 | --- | --- |
-| `CT_BASE_URL` | Instanzname (z. B. `meine-gemeinde`) oder volle URL |
+| `CT_BASE_URL` | Instanzname (z. B. `meine-gemeinde`) oder volle URL (nur `https://`; `http://` nur für localhost) |
+| `main_url` / `CT_MAIN_URL` | Hauptinstanz (Zentralinstanz) für die Anmeldung einer Nebeninstanz; nur wenn ausdrücklich gesetzt |
 | `CT_LOGIN_TOKEN` | API-Login-Token |
 | `CT_USERNAME` / `CT_PASSWORD` | Alternative zum Token |
 | `delay_ms` | Pause zwischen API-Aufrufen in Millisekunden (Standard: 500) |
@@ -180,8 +189,12 @@ Kopiere `config.example.json` nach `config.json` oder nutze Umgebungsvariablen:
 | `CT_PRE_JOIN_GROUPS` | Umgebungsvariable für `pre_join_groups` |
 | `permission_groups.edit_persons` | Gruppe für Import-Rechte (Standard: Personen Administration, Fallback Personen bearbeiten) |
 | `permission_groups.export_persons` | Gruppe für Export (Standard: Personen exportieren) |
-| `duplicate_relationship_type.id` | Beziehungstyp-ID für Duplikat-Verknüpfung (Standard: **8**) |
-| `duplicate_relationship_type.name` | Beziehungstyp-Name (nur Fallback, wenn ID 8 fehlt) |
+| `duplicate_relationship_type.id` | Beziehungstyp-ID für Duplikat-Verknüpfung (muss existieren, wenn gesetzt) |
+| `duplicate_relationship_type.name` | Beziehungstyp-Name (wird verwendet, wenn keine ID gesetzt ist) |
+
+Ohne ID und Name wird Typ **8** verwendet, sofern sein Name nach Duplikat
+aussieht (Duplikat/Dublette/Duplicate); sonst wird der Typ über diese
+Stichwörter gesucht.
 
 Login-Token beschaffen:
 
@@ -193,8 +206,9 @@ Login-Token beschaffen:
 ### Haupt- und Nebeninstanz (OAuth)
 
 Bei Mandanten mit Zentral- und Nebeninstanz unterstützt das Tool den
-OAuth-Übergang (siehe englische README oder `setup init`). API-Aufrufe laufen
-über die konfigurierte (Neben-)Instanz.
+OAuth-Übergang. Die Hauptinstanz muss dafür ausdrücklich als `main_url`
+eingetragen sein; `setup init` schlägt sie vor und übernimmt sie nur nach
+Bestätigung. API-Aufrufe laufen über die konfigurierte (Neben-)Instanz.
 
 ## CSV-Format (Dubletten)
 
@@ -227,11 +241,12 @@ Zusammenfassung mit Anzahl verknüpft / bereits vorhanden.
 | --- | --- |
 | `setup init` | Interaktive `config.json` anlegen |
 | `setup test` | Login und Verbindung testen |
-| `setup token` | Login-Token anzeigen |
+| `setup token` | Eigenen Login-Token abrufen und verschlüsselt in `config.json` speichern |
 | `setup permissions` | Berechtigungshinweise für Dubletten-Export/Import |
 | `whoami` | Angemeldeter Benutzer, Standort, Gruppen, Instanz-URL |
 | `relationship-types` | Beziehungstypen mit ID und Name auflisten |
-| `export -o DATEI` | Dubletten-CSV exportieren (Standard: `duplikate.csv`, `-` = stdout) |
+| `export -o DATEI` | Dubletten-CSV exportieren (Standard: `duplikate.csv`, `-` = stdout; Hinweise auf stderr) |
+| `export --force` | Vorhandene Ziel-Datei überschreiben (sonst bricht der Export ab) |
 | `export -i` | Standort interaktiv wählen (immer Menü, inkl. „Alle Standorte“) |
 | `export --campus WERT` | Standort per ID oder eindeutigem Namens-Teilstring |
 | `export --campus all` | Dubletten-Suche über alle Standorte (ohne Filter) |
@@ -253,10 +268,40 @@ Unter Windows wird bei Releases `vaya.ico` per
 **Tests:** `go test ./...` – Details in [TESTING.de.md](TESTING.de.md).
 
 ```bash
+scripts/ci.ps1     # bzw. scripts/ci.sh: gofmt, go vet, staticcheck, Tests, Build
 go test ./...
-go vet ./...
 go build -o churchtools-dup.exe .
 ```
+
+`staticcheck` (v0.8.2) benötigt Go 1.26 oder neuer; bei älteren Versionen
+`SKIP_STATICCHECK=1` setzen.
+
+## Zugangsdaten und Datenschutz
+
+- **Verschlüsselte Geheimnisse:** `login_token` und `password` in
+  `config.json` werden beim ersten Start mit
+  [sconfig](https://github.com/janmz/sconfig) verschlüsselt
+  (`login_token_secure`, `secure_password`; im Klartextfeld steht danach ein
+  Hinweistext). Die Verschlüsselung ist an diesen Rechner gebunden – auf
+  einem anderen PC die Zugangsdaten neu eintragen. Zum Ändern den neuen Wert
+  im Klartext in `login_token` bzw. `password` schreiben.
+- `config.json` muss unterhalb des Programmverzeichnisses, des aktuellen
+  Arbeitsverzeichnisses oder des Benutzerverzeichnisses liegen (sconfig-Regel).
+- `config.json` und exportierte CSV-Dateien sind nur für den aktuellen
+  Benutzer lesbar (Windows-ACL, sonst `0600`). Umgebungsvariablen (`CT_*`)
+  werden nie in die Datei geschrieben.
+- **Kein Ausweichen auf geratene Hosts:** Zugangsdaten gehen nur an
+  `base_url` und, falls gesetzt, `main_url`. Weiterleitungen auf einen
+  anderen Host oder ein anderes Schema werden abgelehnt.
+- **Temporäre Gruppen:** Gruppen aus `pre_join_groups` und Rechtegruppen,
+  denen das Tool für einen Lauf beitritt, werden am Ende wieder verlassen;
+  bestehende Mitgliedschaften bleiben unverändert. Eine Anmeldung über das
+  öffentliche Gruppenformular erfolgt nur nach Rückfrage.
+- `setup token` speichert nur den **eigenen** Token, verschlüsselt; er wird
+  nie ausgegeben.
+- Die CSV enthält personenbezogene Daten: nach Prüfung und Import löschen
+  (das Tool erinnert daran). Zellen, die mit `= + - @` beginnen, erhalten ein
+  vorangestelltes `'` gegen Formel-Injection; der Import entfernt es wieder.
 
 ## Contributing
 

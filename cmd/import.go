@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	churchtools "github.com/janmz/churchtools-dup/internal/churchtools"
@@ -13,12 +14,12 @@ import (
 )
 
 var (
-	importCSVPath           string
-	importDryRun            bool
-	importDelayMS           int
-	importSkipPermRequest   bool
-	importSkipGroupAdd      bool
-	importSkipPreJoin       bool
+	importCSVPath         string
+	importDryRun          bool
+	importDelayMS         int
+	importSkipPermRequest bool
+	importSkipGroupAdd    bool
+	importSkipPreJoin     bool
 )
 
 var importCmd = &cobra.Command{
@@ -66,6 +67,8 @@ func runDupImport(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+	// Leave groups joined only for this run, also when the run fails.
+	defer leaveTemporaryGroups(client)
 
 	if !importSkipPreJoin {
 		if err := ensurePreJoinGroups(client, cfg); err != nil {
@@ -80,8 +83,9 @@ func runDupImport(cmd *cobra.Command) error {
 	}
 
 	relType, err := client.FindDuplicateRelationshipType(churchtools.DuplicateRelationshipOptions{
-		TypeID:   cfg.DuplicateRelationshipTypeID(),
-		TypeName: cfg.DuplicateRelType.Name,
+		TypeID:        cfg.DuplicateRelationshipTypeID(),
+		TypeName:      cfg.DuplicateRelType.Name,
+		DefaultTypeID: config.DefaultDuplicateRelationshipTypeID,
 	})
 	if err != nil {
 		return fmt.Errorf("Beziehungstyp: %w", err)
@@ -96,7 +100,7 @@ func runDupImport(cmd *cobra.Command) error {
 	runner := duplicates.ImportRunner{
 		Client:       client,
 		RelType:      relType,
-		GroupName:    churchtools.DuplicateGroupName,
+		GroupName:    config.DefaultDuplicateGroupName,
 		SkipGroupAdd: importSkipGroupAdd,
 	}
 
@@ -115,12 +119,12 @@ func runDupImport(cmd *cobra.Command) error {
 		return err
 	}
 
-	duplicates.PrintImportSummary(results)
-
-	for _, result := range results {
-		if !result.Success && !duplicates.IsSkippedImportResult(result) {
-			return fmt.Errorf("mindestens eine DupID-Gruppe ist fehlgeschlagen")
-		}
+	summary := duplicates.PrintImportSummary(os.Stdout, results)
+	if !importDryRun && summary.Failed == 0 {
+		printDeletionHint(importCSVPath)
+	}
+	if summary.Failed > 0 {
+		return fmt.Errorf("%d DupID-Gruppe(n) fehlgeschlagen", summary.Failed)
 	}
 	return nil
 }

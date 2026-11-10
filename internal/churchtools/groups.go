@@ -22,7 +22,7 @@ type GroupListOptions struct {
 // ListGroups returns groups optionally filtered by campus.
 func (c *Client) ListGroups(opts GroupListOptions) ([]Group, error) {
 	query := url.Values{}
-	query.Set("limit", strconv.Itoa(defaultPersonPageSize))
+	query.Set("limit", strconv.Itoa(defaultPageSize))
 	if opts.CampusID > 0 {
 		query.Add("campus_ids[]", strconv.Itoa(opts.CampusID))
 	}

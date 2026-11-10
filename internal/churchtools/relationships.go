@@ -1,10 +1,8 @@
 package churchtools
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,14 +16,14 @@ type RelationshipType struct {
 
 // DuplicateRelationshipOptions configures duplicate relationship type resolution.
 type DuplicateRelationshipOptions struct {
-	TypeID   int
+	// TypeID is an explicitly configured type ID; it must exist.
+	TypeID int
+	// TypeName is an explicitly configured type name (case-insensitive).
 	TypeName string
+	// DefaultTypeID is tried when neither ID nor name is configured; it is
+	// only used when its labels look like a duplicate type.
+	DefaultTypeID int
 }
-
-const duplicateGroupName = "Duplikate"
-
-// DefaultDuplicateRelationshipTypeID is the ChurchTools relationship type for duplicates.
-const DefaultDuplicateRelationshipTypeID = 8
 
 var duplicateRelationshipKeywords = []string{
 	"duplikat",
@@ -38,6 +36,9 @@ var duplicateRelationshipNamePriority = []string{
 	"dublette",
 	"duplicate",
 }
+
+// relationshipTypePaths lists the current endpoint first, then legacy variants.
+var relationshipTypePaths = []string{"/person/relationshiptypes", "/relationshiptypes", "/relationshipTypes", "/relationship-types"}
 
 type relationshipTypeDetail struct {
 	ID          int
@@ -67,7 +68,19 @@ func (t relationshipTypeDetail) labels() []string {
 
 // ListRelationshipTypes returns relationship types from the ChurchTools API.
 func (c *Client) ListRelationshipTypes() ([]RelationshipType, error) {
-	for _, path := range []string{"/person/relationshiptypes", "/relationshiptypes", "/relationshipTypes", "/relationship-types"} {
+	details, err := c.listRelationshipTypeDetails()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]RelationshipType, len(details))
+	for i, relType := range details {
+		result[i] = relType.relationshipType()
+	}
+	return result, nil
+}
+
+func (c *Client) listRelationshipTypeDetails() ([]relationshipTypeDetail, error) {
+	for _, path := range relationshipTypePaths {
 		items, err := c.fetchAPIPages(path, nil)
 		if err != nil {
 			continue
@@ -77,11 +90,7 @@ func (c *Client) ListRelationshipTypes() ([]RelationshipType, error) {
 			return nil, err
 		}
 		if len(types) > 0 {
-			result := make([]RelationshipType, len(types))
-			for i, relType := range types {
-				result[i] = relType.relationshipType()
-			}
-			return result, nil
+			return types, nil
 		}
 	}
 	return nil, fmt.Errorf("Beziehungstypen konnten nicht geladen werden")
@@ -116,36 +125,9 @@ func relationshipFieldString(fields map[string]any, key string) string {
 	return ""
 }
 
-func decodeRelationshipTypes(items []json.RawMessage) ([]RelationshipType, error) {
-	details, err := decodeRelationshipTypeDetails(items)
-	if err != nil {
-		return nil, err
-	}
-	types := make([]RelationshipType, 0, len(details))
-	for _, detail := range details {
-		types = append(types, detail.relationshipType())
-	}
-	return types, nil
-}
-
-func (c *Client) listRelationshipTypeDetails() ([]relationshipTypeDetail, error) {
-	for _, path := range []string{"/person/relationshiptypes", "/relationshiptypes", "/relationshipTypes", "/relationship-types"} {
-		items, err := c.fetchAPIPages(path, nil)
-		if err != nil {
-			continue
-		}
-		types, err := decodeRelationshipTypeDetails(items)
-		if err != nil {
-			return nil, err
-		}
-		if len(types) > 0 {
-			return types, nil
-		}
-	}
-	return nil, fmt.Errorf("Beziehungstypen konnten nicht geladen werden")
-}
-
-// FindDuplicateRelationshipType returns the relationship type used for duplicates.
+// FindDuplicateRelationshipType returns the relationship type used for
+// duplicates. Order: configured ID, configured name, default ID (only when it
+// looks like a duplicate type), keyword search over all types.
 func (c *Client) FindDuplicateRelationshipType(opts DuplicateRelationshipOptions) (RelationshipType, error) {
 	types, err := c.listRelationshipTypeDetails()
 	if err != nil {
@@ -154,16 +136,9 @@ func (c *Client) FindDuplicateRelationshipType(opts DuplicateRelationshipOptions
 
 	if opts.TypeID > 0 {
 		if relType, ok := relationshipTypeByID(types, opts.TypeID); ok {
-			return relType, nil
+			return relType.relationshipType(), nil
 		}
-		return RelationshipType{}, fmt.Errorf(
-			"Beziehungstyp mit ID %d nicht gefunden",
-			opts.TypeID,
-		)
-	}
-
-	if relType, ok := relationshipTypeByID(types, DefaultDuplicateRelationshipTypeID); ok {
-		return relType, nil
+		return RelationshipType{}, fmt.Errorf("Beziehungstyp mit ID %d nicht gefunden", opts.TypeID)
 	}
 
 	if name := strings.TrimSpace(opts.TypeName); name != "" {
@@ -182,16 +157,22 @@ func (c *Client) FindDuplicateRelationshipType(opts DuplicateRelationshipOptions
 		}
 	}
 
+	if opts.DefaultTypeID > 0 {
+		if relType, ok := relationshipTypeByID(types, opts.DefaultTypeID); ok && duplicateRelationshipScore(relType) > 0 {
+			return relType.relationshipType(), nil
+		}
+	}
+
 	return pickDuplicateRelationshipType(types)
 }
 
-func relationshipTypeByID(types []relationshipTypeDetail, id int) (RelationshipType, bool) {
+func relationshipTypeByID(types []relationshipTypeDetail, id int) (relationshipTypeDetail, bool) {
 	for _, relType := range types {
 		if relType.ID == id {
-			return relType.relationshipType(), true
+			return relType, true
 		}
 	}
-	return RelationshipType{}, false
+	return relationshipTypeDetail{}, false
 }
 
 func matchRelationshipTypesByName(types []relationshipTypeDetail, name string) []relationshipTypeDetail {
@@ -224,21 +205,14 @@ func pickDuplicateRelationshipType(types []relationshipTypeDetail) (Relationship
 		}
 	}
 
-	if len(matches) == 0 {
-		return RelationshipType{}, fmt.Errorf("Beziehungstyp für Duplikate nicht gefunden")
-	}
-	if len(matches) == 1 {
+	switch len(matches) {
+	case 0:
+		return RelationshipType{}, fmt.Errorf("Beziehungstyp für Duplikate nicht gefunden (duplicate_relationship_type in config.json setzen)")
+	case 1:
 		return matches[0].relationshipType(), nil
+	default:
+		return tieBreakDuplicateRelationship(matches).relationshipType(), nil
 	}
-
-	if chosen, ok := tieBreakDuplicateRelationship(matches); ok {
-		return chosen.relationshipType(), nil
-	}
-
-	return RelationshipType{}, fmt.Errorf(
-		"mehrere Beziehungstypen für Duplikate gefunden: %s (duplicate_relationship_type.id in config.json setzen)",
-		formatRelationshipTypeList(matches),
-	)
 }
 
 func duplicateRelationshipScore(relType relationshipTypeDetail) int {
@@ -265,11 +239,12 @@ func duplicateRelationshipScore(relType relationshipTypeDetail) int {
 	return best
 }
 
-func tieBreakDuplicateRelationship(matches []relationshipTypeDetail) (relationshipTypeDetail, bool) {
+// tieBreakDuplicateRelationship prefers the canonical names, then the lowest ID.
+func tieBreakDuplicateRelationship(matches []relationshipTypeDetail) relationshipTypeDetail {
 	for _, preferred := range duplicateRelationshipNamePriority {
 		for _, relType := range matches {
 			if strings.ToLower(strings.TrimSpace(relType.Name)) == preferred {
-				return relType, true
+				return relType
 			}
 		}
 	}
@@ -280,7 +255,7 @@ func tieBreakDuplicateRelationship(matches []relationshipTypeDetail) (relationsh
 			best = relType
 		}
 	}
-	return best, true
+	return best
 }
 
 func formatRelationshipTypeList(types []relationshipTypeDetail) string {
@@ -291,50 +266,35 @@ func formatRelationshipTypeList(types []relationshipTypeDetail) string {
 	return strings.Join(parts, ", ")
 }
 
-// LinkAsDuplicate connects two persons as duplicates via relationship management.
-// The bool is true when a new relationship was created.
-func (c *Client) LinkAsDuplicate(primaryID, otherID int, relType RelationshipType) (bool, error) {
+// LinkAsDuplicate creates a duplicate relationship from primaryID to otherID
+// (POST /persons/{id}/relationships). It does not check for an existing
+// relationship; use DuplicateRelationshipExists before calling it. The legacy
+// AJAX API is only used when the REST endpoint does not exist (HTTP 404).
+func (c *Client) LinkAsDuplicate(primaryID, otherID int, relType RelationshipType) error {
 	if primaryID <= 0 || otherID <= 0 || primaryID == otherID {
-		return false, fmt.Errorf("ungültige Personen-IDs für Duplikat-Verknüpfung")
-	}
-
-	exists, err := c.DuplicateRelationshipExists(primaryID, otherID, relType)
-	if err != nil {
-		return false, err
-	}
-	if exists {
-		return false, nil
-	}
-
-	payloads := []map[string]any{
-		{"personId": otherID, "relationshipTypeId": relType.ID},
-		{"relatedPersonId": otherID, "relationshipTypeId": relType.ID},
-		{"personId": otherID, "relationTypeId": relType.ID},
+		return fmt.Errorf("ungültige Personen-IDs für Duplikat-Verknüpfung")
 	}
 
 	path := fmt.Sprintf("/persons/%d/relationships", primaryID)
-	for _, payload := range payloads {
-		status, body, err := c.postAPI(path, payload, true)
-		if err != nil {
-			return false, err
-		}
-		if status == http.StatusOK || status == http.StatusCreated || status == http.StatusNoContent {
-			return true, nil
-		}
-		if status != http.StatusNotFound && status != http.StatusBadRequest {
-			return false, &APIError{
-				StatusCode: status,
-				Message:    "Duplikat-Beziehung konnte nicht angelegt werden",
-				Body:       string(body),
-			}
-		}
+	status, body, err := c.postAPI(path, map[string]any{
+		"otherPersonId":      otherID,
+		"relationshipTypeId": relType.ID,
+	})
+	if err != nil {
+		return err
 	}
-
-	if err := c.linkAsDuplicateLegacy(primaryID, otherID, relType.ID); err != nil {
-		return false, err
+	switch status {
+	case http.StatusCreated, http.StatusOK, http.StatusNoContent:
+		return nil
+	case http.StatusNotFound:
+		return c.linkAsDuplicateLegacy(primaryID, otherID, relType.ID)
+	default:
+		return newAPIError(status, "Duplikat-Beziehung konnte nicht angelegt werden: "+apiBodyMessage(body, ""), body)
 	}
-	return true, nil
 }
+
+// legacyNotConfirmedMessage is reported when the legacy API did not confirm success.
+const legacyNotConfirmedMessage = "Legacy-API hat das Anlegen der Beziehung nicht bestätigt"
 
 func (c *Client) linkAsDuplicateLegacy(primaryID, otherID, relTypeID int) error {
 	if strings.TrimSpace(c.csrfToken) == "" {
@@ -345,69 +305,32 @@ func (c *Client) linkAsDuplicateLegacy(primaryID, otherID, relTypeID int) error 
 		c.csrfToken = token
 	}
 
-	payload := map[string]any{
+	payload, err := json.Marshal(map[string]any{
 		"func":     "add_rel",
 		"id":       strconv.Itoa(primaryID),
 		"child_id": strconv.Itoa(otherID),
 		"rel_id":   strconv.Itoa(relTypeID),
-	}
-	body, err := json.Marshal(payload)
+	})
 	if err != nil {
 		return err
 	}
 
 	reqURL := strings.TrimSuffix(c.baseURL, "/") + "/?q=churchdb/ajax"
-	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-CSRF-Token", c.csrfToken)
-	c.applyAuth(req)
-
-	resp, err := c.http.Do(req)
+	status, respBody, err := c.doRequest(http.MethodPost, reqURL, payload, true)
 	if err != nil {
 		return fmt.Errorf("Legacy-Beziehung anlegen: %w", err)
 	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return &APIError{
-			StatusCode: resp.StatusCode,
-			Message:    "Legacy-Duplikat-Beziehung fehlgeschlagen",
-			Body:       string(respBody),
-		}
+	if status != http.StatusOK {
+		return newAPIError(status, "Legacy-Duplikat-Beziehung fehlgeschlagen", respBody)
 	}
 
+	// Only an explicit {"status":"success"} counts; an HTML login page or any
+	// other non-JSON answer with HTTP 200 must not be reported as linked.
 	var envelope struct {
 		Status string `json:"status"`
 	}
-	if err := json.Unmarshal(respBody, &envelope); err == nil {
-		if strings.EqualFold(envelope.Status, "error") {
-			return &APIError{
-				StatusCode: resp.StatusCode,
-				Message:    "Legacy-Duplikat-Beziehung abgelehnt",
-				Body:       string(respBody),
-			}
-		}
+	if err := json.Unmarshal(respBody, &envelope); err != nil || !strings.EqualFold(envelope.Status, "success") {
+		return newAPIError(status, legacyNotConfirmedMessage, respBody)
 	}
 	return nil
-}
-
-// EnsurePersonInGroup adds a person to a group by name (e.g. "Duplikate").
-func (c *Client) EnsurePersonInGroup(groupName string, personID int) (MembershipRequestResult, error) {
-	group, err := c.FindGroupByName(groupName)
-	if err != nil {
-		return MembershipRequestResult{}, err
-	}
-	return c.RequestGroupMembership(group.ID, personID)
-}
-
-// DuplicateGroupName is the default group for marked duplicate primaries.
-const DuplicateGroupName = duplicateGroupName
-
-// ListAllPersons loads the complete person list without campus filter.
-func (c *Client) ListAllPersons() ([]Person, error) {
-	return c.ListPersons(PersonListOptions{})
 }

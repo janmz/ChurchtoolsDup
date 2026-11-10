@@ -4,7 +4,7 @@ Thank you for improving Masseneinladung.
 
 ## Setup
 
-1. Install Go 1.22 or newer.
+1. Install Go 1.25 or newer.
 2. Clone the repository.
 3. Run `go mod download`.
 4. Copy `config.example.json` to `config.json` for local tests (do not commit).

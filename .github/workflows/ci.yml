@@ -5,16 +5,38 @@ on:
     branches: [main, master]
   pull_request:
 
+# Read-only by default; no job needs write access.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-go@v5
+      # Minimum supported Go version from go.mod.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: "1.22"
+          go-version: "1.25"
           cache: true
 
-      - name: Run checks
+      - name: Run checks (without staticcheck)
+        env:
+          SKIP_STATICCHECK: "1"
+        run: bash scripts/ci.sh
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Current Go release (latest patch, includes security fixes);
+      # staticcheck v0.8.x needs Go >= 1.26.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Run checks including staticcheck
         run: bash scripts/ci.sh

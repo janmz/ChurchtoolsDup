@@ -7,21 +7,34 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/janmz/churchtools-dup/internal/fileacl"
+	"github.com/janmz/churchtools-dup/internal/iolimit"
 )
 
 const DefaultConfigName = "config.json"
 
 // Config holds ChurchTools connection settings.
+//
+// Secrets are stored with github.com/janmz/sconfig: a plaintext value in
+// "login_token" or "password" is encrypted (machine-bound) into
+// "login_token_secure" / "secure_password" on the first load and replaced by
+// a marker. In memory the fields hold the decrypted values.
 type Config struct {
-	BaseURL          string           `json:"base_url"`
-	LoginToken       string           `json:"login_token,omitempty"`
-	Username         string           `json:"username,omitempty"`
-	Password         string           `json:"password,omitempty"`
-	DelayMS          int              `json:"delay_ms,omitempty"`
-	CampusID         int              `json:"campus_id,omitempty"`
-	PreJoinGroups    string           `json:"pre_join_groups,omitempty"`
-	PermissionGroups PermissionGroups `json:"permission_groups,omitempty"`
-	DuplicateRelType DuplicateRelType `json:"duplicate_relationship_type,omitempty"`
+	BaseURL string `json:"base_url"`
+	// MainURL is the main (central) instance for a sub-instance login. It is
+	// only used when set explicitly; no host is derived automatically.
+	MainURL                  string           `json:"main_url,omitempty"`
+	LoginTokenPassword       string           `json:"login_token,omitempty"`
+	LoginTokenSecurePassword string           `json:"login_token_secure,omitempty"`
+	Username                 string           `json:"username,omitempty"`
+	Password                 string           `json:"password,omitempty"`
+	SecurePassword           string           `json:"secure_password,omitempty"`
+	DelayMS                  int              `json:"delay_ms,omitempty"`
+	CampusID                 int              `json:"campus_id,omitempty"`
+	PreJoinGroups            string           `json:"pre_join_groups,omitempty"`
+	PermissionGroups         PermissionGroups `json:"permission_groups,omitempty"`
+	DuplicateRelType         DuplicateRelType `json:"duplicate_relationship_type,omitempty"`
 }
 
 // DuplicateRelType optionally pins the ChurchTools relationship type for duplicates.
@@ -30,15 +43,30 @@ type DuplicateRelType struct {
 	Name string `json:"name,omitempty"`
 }
 
-// DefaultDuplicateRelationshipTypeID is used when duplicate_relationship_type.id is omitted.
-const DefaultDuplicateRelationshipTypeID = 8
+// Central defaults. Change them only here.
+const (
+	// DefaultDuplicateRelationshipTypeID is tried when neither
+	// duplicate_relationship_type.id nor .name is configured.
+	DefaultDuplicateRelationshipTypeID = 8
+	// DefaultDuplicateGroupName is the group primaries are added to on import.
+	DefaultDuplicateGroupName = "Duplikate"
+	// DefaultDelayMS is the pause between API calls in milliseconds.
+	DefaultDelayMS = 500
+)
 
-// DuplicateRelationshipTypeID returns the configured duplicate relationship type ID.
+// Default returns a configuration with all defaults applied.
+func Default() Config {
+	return Config{DelayMS: DefaultDelayMS}
+}
+
+// DuplicateRelationshipTypeID returns the explicitly configured duplicate
+// relationship type ID, or 0 when none is set (then the name, the default ID
+// and a keyword search are tried in that order).
 func (c Config) DuplicateRelationshipTypeID() int {
 	if c.DuplicateRelType.ID > 0 {
 		return c.DuplicateRelType.ID
 	}
-	return DefaultDuplicateRelationshipTypeID
+	return 0
 }
 
 // PermissionGroups names ChurchTools groups used to request missing rights.
@@ -122,15 +150,9 @@ func (c Config) ExportPersonsGroupName() string {
 
 // Load reads configuration from a JSON file and applies environment overrides.
 func Load(path string) (Config, error) {
-	cfg := Config{DelayMS: 500}
-
-	data, err := os.ReadFile(path)
+	cfg, err := LoadFile(path)
 	if err != nil {
-		return cfg, fmt.Errorf("config lesen (%s): %w", path, err)
-	}
-
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return cfg, fmt.Errorf("config parsen: %w", err)
+		return cfg, err
 	}
 
 	cfg.applyEnv()
@@ -141,14 +163,31 @@ func Load(path string) (Config, error) {
 	return cfg, nil
 }
 
+// LoadFile reads only the JSON file (defaults applied, no environment
+// overrides, no validation). Plaintext secrets in the file are encrypted on
+// disk by sconfig; the returned struct holds the decrypted values. Use it
+// when the file is to be modified and saved again, so values from the
+// environment do not end up on disk.
+func LoadFile(path string) (Config, error) {
+	cfg := Default()
+	// Same limit and error text as for CSV files, before sconfig parses it.
+	if _, err := iolimit.ReadFile(path, iolimit.MaxConfigBytes); err != nil {
+		return cfg, fmt.Errorf("config lesen (%s): %w", path, err)
+	}
+	if err := loadSecure(&cfg, path); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
+}
+
 // LoadOrEmpty returns config from file when present, otherwise environment only.
 func LoadOrEmpty(path string) (Config, error) {
 	if path == "" {
 		path = DefaultConfigName
 	}
 
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		cfg := Config{DelayMS: 500}
+	if !Exists(path) {
+		cfg := Default()
 		cfg.applyEnv()
 		return cfg, cfg.Validate()
 	}
@@ -156,20 +195,52 @@ func LoadOrEmpty(path string) (Config, error) {
 	return Load(path)
 }
 
-// Save writes configuration to disk with restrictive permissions.
-func Save(path string, cfg Config) error {
+// Exists reports whether a config file exists at path.
+func Exists(path string) bool {
+	_, err := os.Stat(path)
+	return !errors.Is(err, os.ErrNotExist)
+}
+
+// SaveCampusID stores campus_id in the config file without touching any other
+// key. Unknown keys are preserved and environment values are never written.
+// A missing file is created.
+func SaveCampusID(path string, campusID int) error {
 	if path == "" {
 		path = DefaultConfigName
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil && !errors.Is(err, os.ErrExist) {
-		dir := filepath.Dir(path)
-		if dir != "." {
+	raw := map[string]any{}
+	if Exists(path) {
+		data, err := iolimit.ReadFile(path, iolimit.MaxConfigBytes)
+		if err != nil {
+			return fmt.Errorf("config lesen (%s): %w", path, err)
+		}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return fmt.Errorf("config parsen: %w", err)
+		}
+	}
+	raw["campus_id"] = campusID
+	return writeJSON(path, raw)
+}
+
+// Save writes the configuration with encrypted secrets and restricts the
+// file to the current user.
+func Save(path string, cfg Config) error {
+	if path == "" {
+		path = DefaultConfigName
+	}
+	return saveSecure(&cfg, path)
+}
+
+// writeJSON writes value as indented JSON with restrictive permissions.
+func writeJSON(path string, value any) error {
+	if dir := filepath.Dir(path); dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("config-verzeichnis anlegen: %w", err)
 		}
 	}
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return fmt.Errorf("config serialisieren: %w", err)
 	}
@@ -178,20 +249,24 @@ func Save(path string, cfg Config) error {
 		return fmt.Errorf("config speichern: %w", err)
 	}
 
-	return nil
+	return fileacl.RestrictToOwner(path)
 }
 
 func (c *Config) applyEnv() {
 	if v := strings.TrimSpace(os.Getenv("CT_BASE_URL")); v != "" {
 		c.BaseURL = v
 	}
+	if v := strings.TrimSpace(os.Getenv("CT_MAIN_URL")); v != "" {
+		c.MainURL = v
+	}
 	if v := strings.TrimSpace(os.Getenv("CT_LOGIN_TOKEN")); v != "" {
-		c.LoginToken = v
+		c.LoginTokenPassword = v
 	}
 	if v := strings.TrimSpace(os.Getenv("CT_USERNAME")); v != "" {
 		c.Username = v
 	}
-	if v := strings.TrimSpace(os.Getenv("CT_PASSWORD")); v != "" {
+	// The password is taken verbatim: spaces may be part of it.
+	if v := os.Getenv("CT_PASSWORD"); strings.TrimSpace(v) != "" {
 		c.Password = v
 	}
 	if v := strings.TrimSpace(os.Getenv("CT_PRE_JOIN_GROUPS")); v != "" {
@@ -206,8 +281,17 @@ func (c *Config) Validate() error {
 	}
 
 	c.BaseURL = NormalizeBaseURL(c.BaseURL)
+	if err := validateInstanceURL("base_url", c.BaseURL); err != nil {
+		return err
+	}
+	if strings.TrimSpace(c.MainURL) != "" {
+		c.MainURL = NormalizeBaseURL(c.MainURL)
+		if err := validateInstanceURL("main_url", c.MainURL); err != nil {
+			return err
+		}
+	}
 
-	hasToken := strings.TrimSpace(c.LoginToken) != ""
+	hasToken := strings.TrimSpace(c.LoginTokenPassword) != ""
 	hasPassword := strings.TrimSpace(c.Username) != "" && strings.TrimSpace(c.Password) != ""
 	if !hasToken && !hasPassword {
 		return errors.New("login_token oder username/password erforderlich")

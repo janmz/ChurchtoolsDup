@@ -1,6 +1,7 @@
 package duplicates_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -335,16 +336,116 @@ func TestImportRunnerDryRunSummaryVorgemerkt(t *testing.T) {
 	}
 }
 
+// CR-16: a failure in the middle of a group keeps the count of relationships
+// that were already created.
+func TestImportRunnerKeepsCountOnPartialFailure(t *testing.T) {
+	posts := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/whoami", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"id": 1, "firstName": "A", "lastName": "B", "email": "a@example.org"},
+		})
+	})
+	mux.HandleFunc("/api/csrftoken", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": "csrf"})
+	})
+	for _, id := range []int{10, 11, 12} {
+		id := id
+		mux.HandleFunc("/api/persons/"+strconv.Itoa(id)+"/relationships", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && id == 10 {
+				posts++
+				if posts == 2 {
+					http.Error(w, "boom", http.StatusInternalServerError)
+					return
+				}
+				w.WriteHeader(http.StatusCreated)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+		})
+	}
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := churchtools.NewClient(server.URL, "token", "", "")
+	if err := client.Login(); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := duplicates.ImportRunner{
+		Client:       client,
+		RelType:      churchtools.RelationshipType{ID: 5, Name: "Duplikat"},
+		SkipGroupAdd: true,
+	}
+	results, err := runner.Run([][]csvfile.DupEntry{{
+		{DupID: 1, PersonID: 10},
+		{DupID: 1, PersonID: 11},
+		{DupID: 1, PersonID: 12},
+	}}, duplicates.ImportOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := results[0]
+	if result.Success || result.Linked != 1 || duplicates.ImportResultStatus(result) != "failed" {
+		t.Fatalf("result = %+v", result)
+	}
+	if !strings.Contains(result.Message, "1 von 2") {
+		t.Fatalf("message = %q, want hint on created relationships", result.Message)
+	}
+	if summary := duplicates.SummarizeImport(results); summary.Failed != 1 || summary.Linked != 1 {
+		t.Fatalf("summary = %+v", summary)
+	}
+}
+
+// The duplicate group is resolved before any change; a missing group aborts.
+func TestImportRunnerFailsEarlyWithoutDuplicateGroup(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/whoami", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{"id": 1, "firstName": "A", "lastName": "B", "email": "a@example.org"},
+		})
+	})
+	mux.HandleFunc("/api/csrftoken", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": "csrf"})
+	})
+	mux.HandleFunc("/api/groups", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{}})
+	})
+	mux.HandleFunc("/api/persons/10/relationships", func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("no relationship call expected before the group is resolved")
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	client := churchtools.NewClient(server.URL, "token", "", "")
+	if err := client.Login(); err != nil {
+		t.Fatal(err)
+	}
+
+	runner := duplicates.ImportRunner{Client: client, RelType: churchtools.RelationshipType{ID: 5}}
+	_, err := runner.Run([][]csvfile.DupEntry{{{DupID: 1, PersonID: 10}, {DupID: 1, PersonID: 11}}}, duplicates.ImportOptions{})
+	if err == nil {
+		t.Fatal("expected error for missing duplicate group")
+	}
+}
+
 func TestPrintImportSummaryCountsExistingAsSkipped(t *testing.T) {
 	results := []duplicates.ImportResult{
 		{DupID: 2, Success: true, Linked: 1, AlreadyLinked: 0, Message: "Person 10003 mit 1 Dublette(n) verknüpft"},
 		{DupID: 3, Success: true, Linked: 0, AlreadyLinked: 1, Message: "Person 10005: alle 1 Duplikat-Beziehung(en) bereits vorhanden"},
+		{DupID: 4, Success: false, Linked: 1, Message: "Beziehung 1 -> 2 fehlgeschlagen"},
 	}
 
-	if duplicates.ImportResultStatus(results[0]) != "ok" {
-		t.Fatalf("dup 2 status = %q", duplicates.ImportResultStatus(results[0]))
+	var out bytes.Buffer
+	summary := duplicates.PrintImportSummary(&out, results)
+	want := duplicates.ImportSummary{OK: 1, Skipped: 1, Failed: 1, Linked: 2, Existing: 1}
+	if summary != want {
+		t.Fatalf("summary = %+v, want %+v", summary, want)
 	}
-	if duplicates.ImportResultStatus(results[1]) != "skipped" {
-		t.Fatalf("dup 3 status = %q", duplicates.ImportResultStatus(results[1]))
+	text := out.String()
+	for _, line := range []string{"OK DupID 2", "ÜBERSPRUNGEN DupID 3", "FEHLER DupID 4", "1 OK, 1 übersprungen, 1 Fehler (2 verknüpft, 1 bereits vorhanden)"} {
+		if !strings.Contains(text, line) {
+			t.Fatalf("output misses %q:\n%s", line, text)
+		}
 	}
 }

@@ -1,6 +1,6 @@
 # ChurchTools_Dup
 
-[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go)](https://golang.org)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://golang.org)
 [![Release](https://img.shields.io/badge/Release-GitHub-0077B6)](https://github.com/janmz/ChurchToolsDup/releases)
 [![License: MIT (Modified)](https://img.shields.io/badge/License-MIT--Modified-blue.svg)](LICENSE)
 [![Support: CFI-Kinderhilfe](https://img.shields.io/badge/Support-CFI--Kinderhilfe-0077B6?logo=heart)](https://cfi-kinderhilfe.de/jetzt-spenden?q=VAYACTDUP)
@@ -51,6 +51,10 @@ set, all campuses apply.
 the **same campus** are treated as a shared mailbox (couple, etc.) and are
 **not** linked.
 
+**Shared addresses:** an e-mail address used by more than 5 persons (e.g.
+`info@…` or a placeholder) is not used for linking; the export lists it as a
+hint on stderr. DupIDs with 10 or more persons produce a warning.
+
 #### Normalization and fuzzy matching
 
 - **E-mail:** lowercased, trimmed
@@ -65,14 +69,17 @@ the **same campus** are treated as a shared mailbox (couple, etc.) and are
 - **Street:** `ß`→`ss`, `Str.`/`Straße`/`Strasse` unified, punctuation and
   extra spaces ignored (`Klarstr.` = `Klarstraße`)
 
-Candidates are pre-filtered with **blocking keys** (first name token + city +
-street, or first + last name) so not every person is compared to every other.
+Candidates are pre-filtered with **blocking keys** (first-name initial + city +
+street, or first-name initial + each last-name token, also with first and last
+name swapped) so not every person is compared to every other. DupIDs are
+numbered by the smallest person ID and stay stable for the same data.
 
 #### What is not exported
 
 - Singletons with no partner in the group
 - Groups where **no** person belongs to the selected campus
 - Couples/shared mailbox (see exception above)
+- Links that rely only on an e-mail address shared by more than 5 persons
 
 ### Import (`import`)
 
@@ -89,7 +96,7 @@ street, or first + last name) so not every person is compared to every other.
 
 ## Requirements
 
-- Go 1.22+ (build from source)
+- Go 1.25+ (build from source)
 - ChurchTools access (login token or username/password)
 - **Export:** **export data** permission (group “Personen exportieren”)
 - **Import:** **edit relations** permission (group “Personen Administration” or
@@ -158,7 +165,8 @@ Set the duplicate type ID in `config.json`, e.g.:
 
 | Variable / field | Description |
 | --- | --- |
-| `CT_BASE_URL` | Instance name or full URL |
+| `CT_BASE_URL` | Instance name or full URL (`https://` only; `http://` only for localhost) |
+| `main_url` / `CT_MAIN_URL` | Main (central) instance for a sub-instance login; only used when set explicitly |
 | `CT_LOGIN_TOKEN` | API login token |
 | `CT_USERNAME` / `CT_PASSWORD` | Alternative to token |
 | `delay_ms` | Delay between API calls in ms (default: 500) |
@@ -167,8 +175,12 @@ Set the duplicate type ID in `config.json`, e.g.:
 | `CT_PRE_JOIN_GROUPS` | Environment override for `pre_join_groups` |
 | `permission_groups.edit_persons` | Group for import rights |
 | `permission_groups.export_persons` | Group for export |
-| `duplicate_relationship_type.id` | Relationship type ID (default: **8**) |
-| `duplicate_relationship_type.name` | Relationship type name (fallback if ID 8 missing) |
+| `duplicate_relationship_type.id` | Relationship type ID (must exist when set) |
+| `duplicate_relationship_type.name` | Relationship type name (used when no ID is set) |
+
+Without ID and name, type **8** is used if its name looks like a duplicate
+type (Duplikat/Dublette/Duplicate); otherwise the type is found by these
+keywords.
 
 ## CSV format (duplicates)
 
@@ -196,11 +208,12 @@ Summary includes counts for linked vs. already existing.
 | --- | --- |
 | `setup init` | Create `config.json` interactively |
 | `setup test` | Test login and connection |
-| `setup token` | Show login token |
+| `setup token` | Fetch your own login token and store it encrypted in `config.json` |
 | `setup permissions` | Permission hints for export/import |
 | `whoami` | User, campus, groups, instance URL |
 | `relationship-types` | List relationship types with ID and name |
-| `export -o FILE` | Export duplicate CSV (default `duplikate.csv`) |
+| `export -o FILE` | Export duplicate CSV (default `duplikate.csv`, `-` = stdout; hints go to stderr) |
+| `export --force` | Overwrite an existing output file (otherwise the export stops) |
 | `export -i` | Choose campus interactively (always prompts, incl. “All campuses”) |
 | `export --campus VALUE` | Campus by ID or unique name substring; only needed for a different campus |
 | `export --campus all` | Duplicate search across all campuses (no filter) |
@@ -218,10 +231,39 @@ See [TESTING.md](TESTING.md). Windows release builds embed `vaya.ico` via
 [go-winres](https://github.com/tc-hib/go-winres).
 
 ```bash
+scripts/ci.sh      # or scripts/ci.ps1: gofmt, go vet, staticcheck, tests, build
 go test ./...
-go vet ./...
 go build -o churchtools-dup .
 ```
+
+`staticcheck` (v0.8.2) needs Go 1.26 or newer; on older toolchains set
+`SKIP_STATICCHECK=1`.
+
+## Credentials and privacy
+
+- **Encrypted secrets:** `login_token` and `password` in `config.json` are
+  encrypted with [sconfig](https://github.com/janmz/sconfig) on first start
+  (`login_token_secure`, `secure_password`; the plaintext field then shows a
+  marker). The encryption is bound to this computer – on another PC enter the
+  secrets again. To change a secret, write the new plaintext value into
+  `login_token` / `password`.
+- `config.json` must be located below the program directory, the current
+  working directory or your home directory (sconfig rule).
+- `config.json` and exported CSV files are readable only by the current user
+  (Windows ACL, `0600` elsewhere). Environment variables (`CT_*`) are never
+  written to the file.
+- **No fallback to guessed hosts:** credentials are only sent to `base_url`
+  and, if configured, `main_url`. `setup init` suggests a main instance for
+  names like `church-site` but uses it only after confirmation. Redirects to
+  another host or scheme are refused.
+- **Temporary groups:** groups from `pre_join_groups` and permission groups
+  that the tool joins for a run are left again at the end; memberships you
+  had before stay untouched. Joining via the public group signup form is
+  only done after confirmation.
+- `setup token` stores only **your own** token, encrypted; it is never printed.
+- The CSV contains personal data: delete it after review and import (the
+  tool reminds you). Cells starting with `= + - @` are prefixed with `'`
+  against formula injection; the import removes the prefix again.
 
 ## Contributing
 

@@ -90,16 +90,8 @@ func TestOAuthSubInstanceLogin(t *testing.T) {
 	subSrv = httptest.NewServer(subMux)
 	defer subSrv.Close()
 
-	orig := mainInstanceURLForLogin
-	mainInstanceURLForLogin = func(instanceURL string) (string, bool) {
-		if instanceURL == subSrv.URL {
-			return centralSrv.URL, true
-		}
-		return "", false
-	}
-	t.Cleanup(func() { mainInstanceURLForLogin = orig })
-
 	client := NewClient(subSrv.URL, "", "jan@example.org", password)
+	client.SetMainInstanceURL(centralSrv.URL)
 	if err := client.Login(); err != nil {
 		t.Fatalf("Login: %v", err)
 	}

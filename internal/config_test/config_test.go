@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	config "github.com/janmz/churchtools-dup/internal/config"
@@ -44,9 +45,9 @@ func TestLoadAndSave(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 
 	cfg := config.Config{
-		BaseURL:    "https://demo.church.tools",
-		LoginToken: "secret-token",
-		DelayMS:    250,
+		BaseURL:            "https://demo.church.tools",
+		LoginTokenPassword: "secret-token",
+		DelayMS:            250,
 	}
 
 	if err := config.Save(path, cfg); err != nil {
@@ -58,7 +59,7 @@ func TestLoadAndSave(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	if loaded.BaseURL != cfg.BaseURL || loaded.LoginToken != cfg.LoginToken || loaded.DelayMS != cfg.DelayMS {
+	if loaded.BaseURL != cfg.BaseURL || loaded.LoginTokenPassword != cfg.LoginTokenPassword || loaded.DelayMS != cfg.DelayMS {
 		t.Fatalf("loaded config mismatch: %+v", loaded)
 	}
 }
@@ -68,9 +69,9 @@ func TestLoadCampusID(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 
 	cfg := config.Config{
-		BaseURL:    "https://demo.church.tools",
-		LoginToken: "secret-token",
-		CampusID:   42,
+		BaseURL:            "https://demo.church.tools",
+		LoginTokenPassword: "secret-token",
+		CampusID:           42,
 	}
 
 	if err := config.Save(path, cfg); err != nil {
@@ -115,8 +116,8 @@ func TestLoadAppliesEnv(t *testing.T) {
 	if loaded.BaseURL != "https://demo.church.tools" {
 		t.Fatalf("base url = %q", loaded.BaseURL)
 	}
-	if loaded.LoginToken != "from-env" {
-		t.Fatalf("token = %q", loaded.LoginToken)
+	if loaded.LoginTokenPassword != "from-env" {
+		t.Fatalf("token = %q", loaded.LoginTokenPassword)
 	}
 }
 
@@ -140,10 +141,13 @@ func TestLoadAppliesEnvInstanceName(t *testing.T) {
 	}
 }
 
-func TestDuplicateRelationshipTypeIDDefaultsToEight(t *testing.T) {
+func TestDuplicateRelationshipTypeIDOnlyWhenConfigured(t *testing.T) {
 	cfg := config.Config{}
-	if got := cfg.DuplicateRelationshipTypeID(); got != 8 {
-		t.Fatalf("default id = %d, want 8", got)
+	if got := cfg.DuplicateRelationshipTypeID(); got != 0 {
+		t.Fatalf("unset id = %d, want 0 (name and default are resolved later)", got)
+	}
+	if config.DefaultDuplicateRelationshipTypeID != 8 {
+		t.Fatalf("default id = %d, want 8", config.DefaultDuplicateRelationshipTypeID)
 	}
 
 	cfg = config.Config{DuplicateRelType: config.DuplicateRelType{ID: 5}}
@@ -189,5 +193,35 @@ func TestParseCommaSeparatedNames(t *testing.T) {
 	names := config.ParseCommaSeparatedNames(" A , , B ")
 	if len(names) != 2 || names[0] != "A" || names[1] != "B" {
 		t.Fatalf("names = %v", names)
+	}
+}
+
+func TestSaveCampusIDKeepsFileAndIgnoresEnvironment(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	original := `{"base_url":"https://x.church.tools","login_token":"file-token","custom_key":"bleibt"}`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CT_PASSWORD", "geheim-aus-env")
+	t.Setenv("CT_LOGIN_TOKEN", "env-token")
+
+	if err := config.SaveCampusID(path, 4); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, forbidden := range []string{"geheim-aus-env", "env-token"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("environment value %q written to config: %s", forbidden, text)
+		}
+	}
+	for _, want := range []string{`"campus_id": 4`, `"custom_key": "bleibt"`, `"login_token": "file-token"`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("config misses %s: %s", want, text)
+		}
 	}
 }

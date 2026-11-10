@@ -10,9 +10,9 @@ const (
 	ModuleChurchDB   = "churchdb"
 
 	PermExportData        = "export data"
-	PermWriteAccess      = "write access"
+	PermWriteAccess       = "write access"
 	PermAdministerPersons = "administer persons"
-	PermEditRelations    = "edit relations"
+	PermEditRelations     = "edit relations"
 )
 
 // HasModulePermission checks a global permission flag from /permissions/global.
@@ -50,10 +50,10 @@ func (c *Client) HasModulePermission(module, name string) (bool, error) {
 
 // PermissionRequirement describes a missing permission and its grant group.
 type PermissionRequirement struct {
-	Module       string
-	Permission   string
-	GroupNames   []string
-	Description  string
+	Module      string
+	Permission  string
+	GroupNames  []string
+	Description string
 }
 
 // MembershipRequestStatus describes the outcome of a group membership request.
@@ -69,6 +69,8 @@ const (
 type MembershipRequestResult struct {
 	Status  MembershipRequestStatus
 	Message string
+	// AlreadyMember is true when the membership existed before the request.
+	AlreadyMember bool
 }
 
 // EnsurePermissions requests group membership when required permissions are missing.

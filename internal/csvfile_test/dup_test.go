@@ -106,8 +106,8 @@ func TestReadDupAcceptsQuotedCommaInField(t *testing.T) {
 func TestWriteDupUsesCommaAndQuotesFieldsWithComma(t *testing.T) {
 	var buf bytes.Buffer
 	entry := csvfile.DupEntry{
-		DupID:    1,
-		PersonID: 1537,
+		DupID:     1,
+		PersonID:  1537,
 		FirstName: "Max",
 		Street:    "Hauptstr. 1, EG",
 	}
@@ -147,5 +147,57 @@ func TestWriteDupIncludesEmailCampusAndInvitationStatus(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("output missing %q:\n%s", want, output)
 		}
+	}
+}
+
+func TestReadDupRejectsRepeatedPerson(t *testing.T) {
+	cases := map[string]string{
+		"copied row":           "DupID,ID\n1,10\n1,11\n1,11\n",
+		"person in two DupIDs": "DupID,ID\n1,10\n1,11\n2,11\n2,12\n",
+	}
+	for name, text := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "dup.csv")
+			if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := csvfile.ReadDup(path)
+			if err == nil || !strings.Contains(err.Error(), "ID 11") || !strings.Contains(err.Error(), "zeile 4") {
+				t.Fatalf("err = %v, want error naming ID 11 and its lines", err)
+			}
+		})
+	}
+}
+
+// Cells that a spreadsheet would run as a formula are prefixed with ' in the
+// export and restored on import.
+func TestFormulaInjectionEscapedAndRestored(t *testing.T) {
+	entries := []csvfile.DupEntry{
+		{DupID: 1, PersonID: 10, FirstName: "=HYPERLINK(\"http://evil\")", LastName: "+49 123", City: "@SUM(A1)"},
+		{DupID: 1, PersonID: 11, FirstName: "Anna", LastName: "-Muster", Street: "Normal 1"},
+	}
+	path := filepath.Join(t.TempDir(), "dup.csv")
+	if err := csvfile.WriteDup(path, entries); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, cell := range []string{`"'=HYPERLINK(""http://evil"")"`, "'+49 123", "'@SUM(A1)", "'-Muster"} {
+		if !strings.Contains(text, cell) {
+			t.Fatalf("escaped cell %s missing in:\n%s", cell, text)
+		}
+	}
+
+	loaded, err := csvfile.ReadDup(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded[0].FirstName != entries[0].FirstName || loaded[0].LastName != "+49 123" ||
+		loaded[0].City != "@SUM(A1)" || loaded[1].LastName != "-Muster" || loaded[1].FirstName != "Anna" {
+		t.Fatalf("round trip changed values: %+v", loaded)
 	}
 }

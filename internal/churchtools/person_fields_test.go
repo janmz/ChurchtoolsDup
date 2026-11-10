@@ -3,9 +3,11 @@ package churchtools
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestEnrichPersonFieldsCreatedAtAndCampus(t *testing.T) {
+	useCEST(t) // 22:26Z is 00:26 on the next day in Germany
 	raw := []byte(`{
 		"id": 10005,
 		"firstName": "Erika",
@@ -17,7 +19,7 @@ func TestEnrichPersonFieldsCreatedAtAndCampus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if person.CreatedAt != "20.05.2026" {
+	if person.CreatedAt != "21.05.2026" {
 		t.Fatalf("CreatedAt = %q", person.CreatedAt)
 	}
 	if person.CampusID != 7 {
@@ -85,6 +87,7 @@ func TestPrivacyPolicyAgreementArrayDecodingInDecodePerson(t *testing.T) {
 }
 
 func TestEnrichPersonFieldsSampleWithoutConsent(t *testing.T) {
+	useCEST(t) // 22:26Z is 00:26 on the next day in Germany
 	raw := []byte(`{
 		"id": 10003,
 		"firstName": "Max",
@@ -100,7 +103,7 @@ func TestEnrichPersonFieldsSampleWithoutConsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if person.CreatedAt != "20.05.2026" {
+	if person.CreatedAt != "21.05.2026" {
 		t.Fatalf("CreatedAt = %q", person.CreatedAt)
 	}
 	if person.ExportStatusLabel() != "NEU" {
@@ -132,4 +135,12 @@ func TestCampusLabel(t *testing.T) {
 	if got := CampusLabel(person, names); got != "Campus Süd" {
 		t.Fatalf("CampusLabel = %q", got)
 	}
+}
+
+// useCEST pins time.Local to UTC+2 for date conversion tests.
+func useCEST(t *testing.T) {
+	t.Helper()
+	orig := time.Local
+	time.Local = time.FixedZone("CEST", 2*3600)
+	t.Cleanup(func() { time.Local = orig })
 }

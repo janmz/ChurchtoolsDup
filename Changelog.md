@@ -2,6 +2,143 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.3.2.36] - 2026-11-10 10:24:23
+
+Umsetzung des Sicherheitsaudits vom 2026-11-10.
+
+### Security
+
+- Keine Zugangsdaten mehr an abgeleitete Hosts: Der Login-Fallback auf eine
+  „Hauptinstanz“ wird nur noch mit ausdrücklich gesetztem `main_url`
+  (`CT_MAIN_URL`) genutzt; `setup init` schlägt sie vor und übernimmt sie nur
+  nach Bestätigung (vorher wurde z. B. `meine-gemeinde` → `meine.church.tools`
+  angesprochen) (Nr. 1)
+- `login_token` und `password` werden mit `github.com/janmz/sconfig/v3`
+  rechnergebunden verschlüsselt in `config.json` gespeichert; vorhandene
+  Klartextwerte werden beim ersten Start umgewandelt (Nr. 2)
+- `config.json` und Dubletten-CSV nur für den aktuellen Benutzer lesbar
+  (Windows-ACL ohne Vererbung, sonst `0600`) (Nr. 3)
+- Gruppen nur noch über den exakten Namen (Sortiernummern-Markup wird
+  ignoriert); öffentliche Gruppenanmeldung nur nach Rückfrage (Nr. 5)
+- CSV-Export entschärft Zellen mit `= + - @`/Tab/CR (Formel-Injection); der
+  Import stellt die Werte wieder her (Nr. 6)
+- `setup token`: Option `--person-id` entfernt (keine Tokens fremder Konten);
+  der eigene Token wird nicht mehr ausgegeben, sondern nach Rückfrage
+  verschlüsselt gespeichert (Nr. 7)
+- Nur `https://` für `base_url`/`main_url` (`http://` nur localhost);
+  Weiterleitungen auf anderen Host oder anderes Schema werden abgelehnt (Nr. 9)
+- Login-Token wird verdeckt eingegeben; Passworteingabe ohne Sternchen
+  (verrät keine Länge mehr) (Nr. 10)
+- E-Mail-Adressen in Hinweisen maskiert; Servertexte in Meldungen gekürzt und
+  ohne Steuerzeichen (Nr. 11)
+
+### Changed
+
+- Für einen Lauf beigetretene Vorab- und Rechtegruppen werden am Ende von
+  `export`/`import` wieder verlassen (auch bei Fehlern); bestehende
+  Mitgliedschaften bleiben unverändert (Nr. 4, angepasst)
+- Datenschutzhinweis zum Löschen der CSV nach Export und Import; neuer
+  README-Abschnitt „Zugangsdaten und Datenschutz“ (Nr. 15)
+- Gesamtlimit 512 MiB für alle Seiten einer Listenabfrage; Eingabezeilen auf
+  4096 Bytes begrenzt (Nr. 16)
+- Go-Mindestversion 1.25 (sconfig); Release-Builds und Lint mit Go 1.27 (Nr. 8)
+- CI/Release: Standardrechte `contents: read`, Schreibrecht nur im
+  Release-Job, Workflow-Eingaben über `env:` und Tag-Prüfung, Actions per
+  Commit-SHA fixiert (Nr. 14)
+
+### Dependencies
+
+- `github.com/janmz/sconfig/v3` v3.0.0 (Ausnahme von der 14-Tage-Regel nach
+  Rückfrage), `golang.org/x/sys` v0.29.0 jetzt direkt
+
+## [1.3.1.35] - 2026-11-10 10:00:54
+
+### Fixed
+
+- Passwort-Sitzungen: schreibende REST-Aufrufe (POST/PUT/PATCH/DELETE) senden
+  jetzt das CSRF-Token im Header `CSRF-Token` (wie der offizielle
+  ChurchTools-JS-Client; nicht bei `GET` und `/api/login`). Neuere
+  ChurchTools-Versionen lehnen Schreibzugriffe aus einer Sitzung sonst ab
+- Legacy-AJAX-Fallback sendete den falschen Header `X-CSRF-Token`; er nutzt
+  jetzt `CSRF-Token` und läuft über die zentrale HTTP-Schicht
+  (Größenlimit, HTTP-429-Wiederholung)
+
+## [1.3.0.34] - 2026-11-10 09:52:06
+
+Umsetzung des Code-Reviews vom 2026-11-10 (CR-1 … CR-27).
+
+### Fixed
+
+- Import: `POST /persons/{id}/relationships` sendet jetzt den von der API
+  verlangten Body `{otherPersonId, relationshipTypeId}`; HTTP 201 gilt als
+  Erfolg. Bisher scheiterte jeder echte Import oder fiel auf die Legacy-API
+  zurück (CR-1)
+- Legacy-Fallback nur noch bei HTTP 404 und nur mit ausdrücklichem
+  `{"status":"success"}` als Erfolg – eine HTML-/Login-Seite mit HTTP 200
+  meldet keinen Scheinerfolg mehr (CR-2)
+- Dubletten-Erkennung: vertauschte Vor-/Nachnamen („Hans Meier“/„Meier Hans“),
+  Initialen („A. Schulz“/„Anna Schulz“) und Teil-Doppelnamen werden jetzt
+  tatsächlich verglichen (gemeinsame Vorfilter-Schlüssel) (CR-3)
+- Beziehungstyp: `duplicate_relationship_type.name` wird berücksichtigt;
+  Reihenfolge ID → Name → ID 8 (nur wenn als Duplikat-Typ erkennbar) →
+  Stichwortsuche (CR-4)
+- Gruppensuche: exakter Name (ohne Groß-/Kleinschreibung) vor Teilstring;
+  Mitgliedschaftsprüfung nur noch mit exaktem Namen („Duplikate (alt)“ zählt
+  nicht als „Duplikate“) (CR-5)
+- Passworteingabe: Umlaute bleiben erhalten (UTF-8), Leerzeichen am Rand
+  werden nicht mehr abgeschnitten (Terminal, Pipe, `CT_PASSWORD`) (CR-6)
+- Export: Fehler beim Nachladen einzelner Personen brechen den Export nicht
+  mehr ab (Listendaten + Warnung); `delay_ms` wird eingehalten, HTTP 429 einmal
+  wiederholt, Fortschritt angezeigt (CR-7)
+- Gruppenbeitritt: bestehende Mitgliedschaften werden nicht mehr per PUT
+  überschrieben (Kommentar/Enddatum blieben sonst nicht erhalten);
+  neuer Beitritt mit `only_add` (CR-8)
+- Standortauswahl speichert nur `campus_id`; Zugangsdaten aus Umgebungsvariablen
+  landen nicht mehr in `config.json` (CR-9)
+- `setup init` fragt vor dem Überschreiben und behält `campus_id`,
+  `permission_groups` und `duplicate_relationship_type` (CR-10)
+- Menüs und Hinweise gehen nach stderr, `export -o -` liefert reine CSV (CR-11)
+- Import prüft die CSV vorab: doppelte Zeilen und Personen in mehreren DupIDs
+  werden mit Zeilennummern gemeldet, bevor etwas geändert wird (CR-12)
+- Erneute Anmeldung nach Sitzungsablauf auch bei Benutzername/Passwort (CR-13)
+- Setup über Pipe: Passwort wird aus demselben Eingabepuffer gelesen; letzte
+  Zeile ohne Zeilenumbruch wird akzeptiert (CR-15)
+- Import-Zusammenfassung zählt bei Fehlern bereits angelegte Beziehungen mit
+  („x von y bereits angelegt“) (CR-16)
+- DupIDs sind bei gleichem Datenbestand stabil (CR-17)
+- Erstellungsdatum wird in Ortszeit ausgegeben (vorher UTC, Vortag möglich) (CR-18)
+- `--campus`: Umlaute/Akzente werden umgeschrieben (ü→ue, é→e), Ziffern bleiben
+  erhalten, exakter Name hat Vorrang (CR-19)
+
+### Changed
+
+- `export` überschreibt eine vorhandene Ziel-Datei nur noch mit `--force` (CR-14)
+- E-Mail-Adressen, die mehr als 5 Personen nutzen (z. B. `info@…`), werden
+  nicht mehr zur Verknüpfung verwendet, sondern als Hinweis gemeldet; sehr große
+  DupIDs erzeugen eine Warnung (CR-20)
+- Import löst die Gruppe „Duplikate“ einmal vorab auf (Abbruch vor jeder
+  Änderung, wenn sie fehlt) und prüft jede Beziehung nur noch einmal (CR-22)
+- Vorab-Gruppen: abgelehnte Gruppen lösen keine weiteren Durchläufe mehr aus (CR-23)
+- Zentrale HTTP-Schicht im Client: Größenlimits (API 32 MiB, CSV 100 MiB,
+  Konfiguration 1 MiB), Fehlertexte auf ca. 2 KB gekürzt (CR-21)
+- Defaults (Beziehungstyp 8, Gruppe „Duplikate“, `delay_ms` 500) zentral in
+  `internal/config` (CR-25)
+- CI: `gofmt`-Prüfung und `staticcheck` v0.8.2 (eigener Lint-Job mit Go 1.26);
+  `.gitattributes` erzwingt LF für Go-Dateien (CR-26)
+
+### Removed
+
+- Ungenutzter Code aus dem Fork (Personenfilter nach Gruppe/Status/IDs,
+  `promptFilterMode`, `applyDefaultCampus`, doppelte Typ-Dekodierung) (CR-24)
+
+### Tests
+
+- Neue Tests für Beziehungs-POST, Legacy-Fallback, vertauschte Namen/Initialen,
+  stabile DupIDs, Sammel-E-Mails, Gruppensuche, `only_add`, Vorab-Gruppen,
+  Teilfehler im Import, Zusammenfassung, CSV-Prüfung, Standortsuche,
+  `SaveCampusID`, Re-Login per Passwort, HTTP 429, Datumszone, Passwort-UTF-8;
+  Paginierungstest mit 6 statt 10 001 Anfragen (CR-27)
+
 ## [1.2.4.32] - 2026-08-19 22:17:34
 
 ### Fixed

@@ -6,7 +6,7 @@
 go test ./...
 ```
 
-Or run the local CI script (`go vet`, build included):
+Or run the local CI script (gofmt, `go vet`, staticcheck, build included):
 
 ```bash
 scripts/ci.sh     # Linux/macOS

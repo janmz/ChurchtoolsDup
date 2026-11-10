@@ -3,13 +3,22 @@ package churchtools
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
+
+	"github.com/janmz/churchtools-dup/internal/iolimit"
 )
 
-const maxAPIPages = 10_000
+// maxAPIPages guards against endless pagination; a variable so tests can lower it.
+var maxAPIPages = 10_000
+
+// maxAPITotalBytes limits the sum of all pages of one list request, so a
+// misbehaving server cannot fill memory page by page (variable for tests).
+var maxAPITotalBytes = iolimit.MaxAPITotalBytes
+
+// defaultPageSize is the page size for paginated list endpoints.
+const defaultPageSize = 100
 
 // fetchAPIPages loads all pages from a paginated ChurchTools list endpoint.
 func (c *Client) fetchAPIPages(path string, query url.Values) ([]json.RawMessage, error) {
@@ -17,11 +26,12 @@ func (c *Client) fetchAPIPages(path string, query url.Values) ([]json.RawMessage
 		query = url.Values{}
 	}
 	if query.Get("limit") == "" {
-		query.Set("limit", strconv.Itoa(defaultPersonPageSize))
+		query.Set("limit", strconv.Itoa(defaultPageSize))
 	}
 
 	page := 1
 	var all []json.RawMessage
+	var total int64
 
 	for {
 		if page > maxAPIPages {
@@ -31,6 +41,10 @@ func (c *Client) fetchAPIPages(path string, query url.Values) ([]json.RawMessage
 		body, err := c.getAPI(path, query)
 		if err != nil {
 			return nil, err
+		}
+		total += int64(len(body))
+		if total > maxAPITotalBytes {
+			return nil, fmt.Errorf("paginierung abgebrochen: %w (mehr als %d Bytes für %s)", iolimit.ErrTooLarge, maxAPITotalBytes, path)
 		}
 
 		var envelope struct {
@@ -77,41 +91,14 @@ func (c *Client) fetchAPIList(path string, query url.Values) ([]json.RawMessage,
 	return rawItems(envelope.Data)
 }
 
+// getAPI performs a GET request and returns the body of a 200 response.
 func (c *Client) getAPI(path string, query url.Values) ([]byte, error) {
-	return c.getAPIRetry(path, query, true)
-}
-
-func (c *Client) getAPIRetry(path string, query url.Values, allowRelogin bool) ([]byte, error) {
-	reqURL := c.apiURL(path)
-	if len(query) > 0 {
-		reqURL += "?" + query.Encode()
-	}
-
-	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	c.applyAuth(req)
-
-	resp, err := c.http.Do(req)
+	status, body, err := c.callAPI(http.MethodGet, path, query, nil)
 	if err != nil {
 		return nil, fmt.Errorf("api GET %s: %w", path, err)
 	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode == http.StatusUnauthorized {
-		if err := c.reloginOnce(allowRelogin); err != nil {
-			return nil, err
-		}
-		return c.getAPIRetry(path, query, false)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, &APIError{
-			StatusCode: resp.StatusCode,
-			Message:    "daten konnten nicht geladen werden",
-			Body:       string(body),
-		}
+	if status != http.StatusOK {
+		return nil, newAPIError(status, "daten konnten nicht geladen werden", body)
 	}
 	return body, nil
 }

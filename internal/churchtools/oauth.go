@@ -11,46 +11,19 @@ import (
 
 const maxOAuthRedirects = 15
 
-// MeAPIToken returns the API login token for the current session.
+// MeAPIToken returns the API login token for the current session. The
+// endpoint is not part of the published OpenAPI spec; callers fall back to
+// LoginToken when it fails.
 func (c *Client) MeAPIToken() (string, error) {
-	return c.meAPIToken(true)
-}
-
-func (c *Client) meAPIToken(allowRelogin bool) (string, error) {
-	req, err := http.NewRequest(http.MethodGet, c.apiURL("/person/me/apitoken"), nil)
+	data, err := c.getJSONData("/person/me/apitoken", "API-Token konnte nicht gelesen werden")
 	if err != nil {
 		return "", err
 	}
-	c.applyAuth(req)
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("api-token abrufen: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode == http.StatusUnauthorized {
-		if err := c.reloginOnce(allowRelogin); err != nil {
-			return "", err
-		}
-		return c.meAPIToken(false)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", &APIError{
-			StatusCode: resp.StatusCode,
-			Message:    "API-Token konnte nicht gelesen werden",
-			Body:       string(body),
-		}
-	}
-
-	var envelope struct {
-		Data string `json:"data"`
-	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
+	var token string
+	if err := json.Unmarshal(data, &token); err != nil {
 		return "", fmt.Errorf("api-token parsen: %w", err)
 	}
-	return strings.TrimSpace(envelope.Data), nil
+	return strings.TrimSpace(token), nil
 }
 
 func (c *Client) authenticateSubInstanceViaOAuth(centralURL, subURL string) error {

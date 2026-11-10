@@ -6,7 +6,7 @@
 go test ./...
 ```
 
-Oder das lokale CI-Skript (inkl. `go vet`, Build):
+Oder das lokale CI-Skript (inkl. gofmt, `go vet`, staticcheck, Build):
 
 ```bash
 scripts/ci.ps1    # Windows

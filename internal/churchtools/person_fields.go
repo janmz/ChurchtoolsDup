@@ -2,6 +2,7 @@ package churchtools
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -152,27 +153,29 @@ func parseMetaDateString(raw json.RawMessage) string {
 }
 
 // FormatExportDate formats API timestamps for CSV export (DD.MM.YYYY).
+// Timestamps with a time zone (ChurchTools sends UTC, e.g. "…T23:30:00Z")
+// are converted to local time first, so a person created shortly after
+// midnight local time gets the correct day. Values without zone are taken as
+// local time; pure dates stay unchanged.
 func FormatExportDate(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return ""
 	}
 
-	layouts := []string{
-		time.RFC3339,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02T15:04:05",
-		"2006-01-02",
+	const exportLayout = "02.01.2006"
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t.In(time.Local).Format(exportLayout)
 	}
-	for _, layout := range layouts {
-		if t, err := time.Parse(layout, value); err == nil {
-			return t.Format("02.01.2006")
+	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02"} {
+		if t, err := time.ParseInLocation(layout, value, time.Local); err == nil {
+			return t.Format(exportLayout)
 		}
 	}
 
 	if len(value) >= 10 && value[4] == '-' && value[7] == '-' {
 		if t, err := time.Parse("2006-01-02", value[:10]); err == nil {
-			return t.Format("02.01.2006")
+			return t.Format(exportLayout)
 		}
 	}
 
@@ -218,7 +221,8 @@ func intFromFlexibleField(raw json.RawMessage) (int, bool) {
 	}
 	var text string
 	if err := json.Unmarshal(raw, &text); err == nil {
-		return intFromAny(text)
+		number, err := strconv.Atoi(strings.TrimSpace(text))
+		return number, err == nil && number > 0
 	}
 	return 0, false
 }

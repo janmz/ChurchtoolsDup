@@ -2,22 +2,24 @@ package duplicates
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	churchtools "github.com/janmz/churchtools-dup/internal/churchtools"
+	config "github.com/janmz/churchtools-dup/internal/config"
 	csvfile "github.com/janmz/churchtools-dup/internal/csvfile"
 )
 
 // ImportResult describes the outcome for one duplicate group.
 type ImportResult struct {
-	DupID          int
-	Primary        int
-	Success        bool
-	Linked         int
-	AlreadyLinked  int
-	Vorgemerkt     bool // dry-run: Primärperson bereits in Gruppe „Duplikate“
-	Message        string
+	DupID         int
+	Primary       int
+	Success       bool
+	Linked        int  // relationships created (or, in a dry run, to be created)
+	AlreadyLinked int  // relationships that existed before
+	Vorgemerkt    bool // dry run: primary already in the duplicate group
+	Message       string
 }
 
 // ImportOptions controls duplicate import behaviour.
@@ -34,139 +36,131 @@ type ImportRunner struct {
 	SkipGroupAdd bool
 }
 
-// Run imports duplicate groups: link persons and add primary to group "Duplikate".
+// Run imports duplicate groups: link persons and add primary to the duplicate
+// group. The group is resolved once before any change; when it cannot be
+// found, Run fails without creating relationships.
 func (r ImportRunner) Run(groups [][]csvfile.DupEntry, opts ImportOptions) ([]ImportResult, error) {
-	results := make([]ImportResult, 0, len(groups))
+	var duplicateGroup churchtools.Group
+	if !opts.DryRun && !r.SkipGroupAdd {
+		group, err := r.Client.FindGroupByName(r.groupName())
+		if err != nil {
+			return nil, fmt.Errorf("Gruppe %q: %w (oder --skip-group-add verwenden)", r.groupName(), err)
+		}
+		duplicateGroup = group
+	}
 
+	results := make([]ImportResult, 0, len(groups))
 	for i, group := range groups {
 		if i > 0 && opts.Delay > 0 {
 			time.Sleep(opts.Delay)
 		}
 
-		result := ImportResult{DupID: group[0].DupID}
 		if len(group) < 2 {
-			result.Message = "übersprungen: weniger als zwei Personen"
-			results = append(results, result)
+			results = append(results, ImportResult{
+				DupID:   group[0].DupID,
+				Message: "übersprungen: weniger als zwei Personen",
+			})
 			continue
 		}
-
-		primary := group[0].PersonID
-		result.Primary = primary
 
 		if opts.DryRun {
-			others := personIDs(group[1:])
-			alreadyLinked, err := r.existingDuplicateIDs(primary, group[1:])
-			if err != nil {
-				result.Message = fmt.Sprintf("Beziehungen prüfen fehlgeschlagen: %v", err)
-				results = append(results, result)
-				continue
-			}
-
-			inGroup := false
-			if !r.SkipGroupAdd {
-				inGroup, err = r.Client.PersonIsInGroup(primary, r.groupName())
-				if err != nil {
-					result.Message = fmt.Sprintf("Gruppenmitgliedschaft prüfen fehlgeschlagen: %v", err)
-					results = append(results, result)
-					continue
-				}
-			}
-
-			result.Success = true
-			result.Linked = len(others) - len(alreadyLinked)
-			result.AlreadyLinked = len(alreadyLinked)
-			result.Vorgemerkt = inGroup && !r.SkipGroupAdd
-			result.Message = formatDryRunMessage(primary, others, alreadyLinked, r.groupName(), inGroup, r.SkipGroupAdd)
-			results = append(results, result)
-			continue
+			results = append(results, r.dryRunGroup(group))
+		} else {
+			results = append(results, r.importGroup(group, duplicateGroup, opts.Delay))
 		}
-
-		linked := 0
-		alreadyLinked := 0
-		inGroup := false
-		for _, entry := range group[1:] {
-			exists, err := r.Client.DuplicateRelationshipExists(primary, entry.PersonID, r.RelType)
-			if err != nil {
-				result.Message = fmt.Sprintf(
-					"Beziehung %d -> %d prüfen fehlgeschlagen: %v",
-					primary,
-					entry.PersonID,
-					err,
-				)
-				results = append(results, result)
-				goto nextGroup
-			}
-			if exists {
-				alreadyLinked++
-				continue
-			}
-
-			created, err := r.Client.LinkAsDuplicate(primary, entry.PersonID, r.RelType)
-			if err != nil {
-				result.Message = fmt.Sprintf(
-					"Beziehung %d -> %d fehlgeschlagen: %v",
-					primary,
-					entry.PersonID,
-					err,
-				)
-				results = append(results, result)
-				goto nextGroup
-			}
-			if created {
-				linked++
-			} else {
-				alreadyLinked++
-			}
-			if opts.Delay > 0 {
-				time.Sleep(opts.Delay)
-			}
-		}
-
-		if linked == 0 && alreadyLinked == 0 {
-			result.Message = "keine Beziehungen angelegt"
-			results = append(results, result)
-			goto nextGroup
-		}
-
-		inGroup = false
-		if !r.SkipGroupAdd {
-			membership, err := r.Client.EnsurePersonInGroup(r.groupName(), primary)
-			if err != nil {
-				result.Message = fmt.Sprintf("Gruppe %q: %v", r.groupName(), err)
-				results = append(results, result)
-				continue
-			}
-			if membership.Status == churchtools.MembershipDenied {
-				msg := membership.Message
-				if msg == "" {
-					msg = "Mitgliedschaft abgelehnt"
-				}
-				result.Message = fmt.Sprintf("Gruppe %q: %s", r.groupName(), msg)
-				results = append(results, result)
-				continue
-			}
-			inGroup, err = r.Client.PersonIsInGroup(primary, r.groupName())
-			if err != nil {
-				result.Message = fmt.Sprintf("Gruppenmitgliedschaft prüfen fehlgeschlagen: %v", err)
-				results = append(results, result)
-				continue
-			}
-		}
-
-		result.Success = true
-		result.Linked = linked
-		result.AlreadyLinked = alreadyLinked
-		result.Message = formatImportMessage(primary, linked, alreadyLinked, len(group)-1, inGroup, r.groupName(), r.SkipGroupAdd)
-		results = append(results, result)
-	nextGroup:
 	}
 
 	return results, nil
 }
 
+// dryRunGroup reports what importGroup would do without changing anything.
+func (r ImportRunner) dryRunGroup(group []csvfile.DupEntry) ImportResult {
+	primary := group[0].PersonID
+	result := ImportResult{DupID: group[0].DupID, Primary: primary}
+
+	others := personIDs(group[1:])
+	alreadyLinked, err := r.existingDuplicateIDs(primary, group[1:])
+	if err != nil {
+		result.Message = fmt.Sprintf("Beziehungen prüfen fehlgeschlagen: %v", err)
+		return result
+	}
+
+	inGroup := false
+	if !r.SkipGroupAdd {
+		inGroup, err = r.Client.PersonIsInGroup(primary, r.groupName())
+		if err != nil {
+			result.Message = fmt.Sprintf("Gruppenmitgliedschaft prüfen fehlgeschlagen: %v", err)
+			return result
+		}
+	}
+
+	result.Success = true
+	result.Linked = len(others) - len(alreadyLinked)
+	result.AlreadyLinked = len(alreadyLinked)
+	result.Vorgemerkt = inGroup && !r.SkipGroupAdd
+	result.Message = formatDryRunMessage(primary, others, alreadyLinked, r.groupName(), inGroup, r.SkipGroupAdd)
+	return result
+}
+
+// importGroup links all persons of one DupID to the primary and adds the
+// primary to the duplicate group. Counts are kept on failure so the summary
+// reflects relationships that were already created.
+func (r ImportRunner) importGroup(group []csvfile.DupEntry, duplicateGroup churchtools.Group, delay time.Duration) ImportResult {
+	primary := group[0].PersonID
+	result := ImportResult{DupID: group[0].DupID, Primary: primary}
+	total := len(group) - 1
+
+	fail := func(format string, args ...any) ImportResult {
+		result.Message = fmt.Sprintf(format, args...)
+		if result.Linked > 0 {
+			result.Message += fmt.Sprintf(" (%d von %d Beziehung(en) bereits angelegt)", result.Linked, total)
+		}
+		return result
+	}
+
+	for _, entry := range group[1:] {
+		exists, err := r.Client.DuplicateRelationshipExists(primary, entry.PersonID, r.RelType)
+		if err != nil {
+			return fail("Beziehung %d -> %d prüfen fehlgeschlagen: %v", primary, entry.PersonID, err)
+		}
+		if exists {
+			result.AlreadyLinked++
+			continue
+		}
+
+		if err := r.Client.LinkAsDuplicate(primary, entry.PersonID, r.RelType); err != nil {
+			return fail("Beziehung %d -> %d fehlgeschlagen: %v", primary, entry.PersonID, err)
+		}
+		result.Linked++
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+	}
+
+	inGroup := false
+	if !r.SkipGroupAdd {
+		membership, err := r.Client.RequestGroupMembership(duplicateGroup.ID, primary)
+		if err != nil {
+			return fail("Gruppe %q: %v", r.groupName(), err)
+		}
+		if membership.Status == churchtools.MembershipDenied {
+			msg := membership.Message
+			if msg == "" {
+				msg = "Mitgliedschaft abgelehnt"
+			}
+			return fail("Gruppe %q: %s", r.groupName(), msg)
+		}
+		inGroup = membership.Status == churchtools.MembershipActive
+	}
+
+	result.Success = true
+	result.Message = formatImportMessage(primary, result.Linked, result.AlreadyLinked, total, inGroup, r.groupName(), r.SkipGroupAdd)
+	return result
+}
+
 func (r ImportRunner) groupName() string {
 	if strings.TrimSpace(r.GroupName) == "" {
-		return churchtools.DuplicateGroupName
+		return config.DefaultDuplicateGroupName
 	}
 	return r.GroupName
 }
@@ -285,34 +279,52 @@ func formatImportMessage(primary, linked, alreadyLinked, total int, inGroup bool
 	}
 }
 
-// PrintImportSummary writes import results to stdout.
-func PrintImportSummary(results []ImportResult) {
-	ok, skipped, failed := 0, 0, 0
-	linkedTotal, existingTotal := 0, 0
+// ImportSummary aggregates import results.
+type ImportSummary struct {
+	OK       int
+	Skipped  int
+	Failed   int
+	Linked   int // relationships created, including those of failed groups
+	Existing int // relationships that already existed
+}
 
+// SummarizeImport counts results by status.
+func SummarizeImport(results []ImportResult) ImportSummary {
+	var summary ImportSummary
 	for _, result := range results {
 		switch ImportResultStatus(result) {
 		case "ok":
-			ok++
-			linkedTotal += result.Linked
-			existingTotal += result.AlreadyLinked
-			fmt.Printf("OK DupID %d: %s\n", result.DupID, result.Message)
+			summary.OK++
 		case "skipped":
-			skipped++
-			existingTotal += result.AlreadyLinked
-			fmt.Printf("ÜBERSPRUNGEN DupID %d: %s\n", result.DupID, result.Message)
+			summary.Skipped++
 		default:
-			failed++
-			fmt.Printf("FEHLER DupID %d: %s\n", result.DupID, result.Message)
+			summary.Failed++
 		}
+		summary.Linked += result.Linked
+		summary.Existing += result.AlreadyLinked
 	}
-
-	fmt.Printf(
-		"\nZusammenfassung: %d OK, %d übersprungen, %d Fehler (%d verknüpft, %d bereits vorhanden)\n",
-		ok, skipped, failed, linkedTotal, existingTotal,
-	)
+	return summary
 }
 
+// PrintImportSummary writes one line per result and the summary to w.
+func PrintImportSummary(w io.Writer, results []ImportResult) ImportSummary {
+	for _, result := range results {
+		label := map[string]string{"ok": "OK", "skipped": "ÜBERSPRUNGEN"}[ImportResultStatus(result)]
+		if label == "" {
+			label = "FEHLER"
+		}
+		fmt.Fprintf(w, "%s DupID %d: %s\n", label, result.DupID, result.Message)
+	}
+
+	summary := SummarizeImport(results)
+	fmt.Fprintf(w,
+		"\nZusammenfassung: %d OK, %d übersprungen, %d Fehler (%d verknüpft, %d bereits vorhanden)\n",
+		summary.OK, summary.Skipped, summary.Failed, summary.Linked, summary.Existing,
+	)
+	return summary
+}
+
+// ImportResultStatus classifies a result as "ok", "skipped" or "failed".
 func ImportResultStatus(result ImportResult) string {
 	if !result.Success {
 		if strings.Contains(result.Message, "übersprungen") {
@@ -333,4 +345,3 @@ func ImportResultStatus(result ImportResult) string {
 func IsSkippedImportResult(result ImportResult) bool {
 	return ImportResultStatus(result) == "skipped"
 }
-

@@ -8,10 +8,11 @@ import (
 
 const churchToolsHostSuffix = ".church.tools"
 
-var mainInstanceURLForLogin = MainInstanceURL
-
-// MainInstanceURL derives the main ChurchTools instance from a sub-instance URL.
+// MainInstanceURL suggests the main ChurchTools instance for a sub-instance URL.
 // Example: https://gemeinde-unterstadt.church.tools -> https://gemeinde.church.tools
+// The result is only a suggestion for setup: the derived host may belong to a
+// different church, so it must be confirmed by the user before credentials
+// are ever sent there (see Client.SetMainInstanceURL).
 func MainInstanceURL(instanceURL string) (string, bool) {
 	parsed, err := url.Parse(normalizeInstanceURL(instanceURL))
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {

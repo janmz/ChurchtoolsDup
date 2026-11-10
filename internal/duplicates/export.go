@@ -7,15 +7,17 @@ import (
 )
 
 // EnrichGroups loads full person details for all members of duplicate groups.
-func EnrichGroups(client *churchtools.Client, groups []Group) ([]Group, error) {
+// Persons whose details cannot be loaded keep their list data; they are
+// returned as failures so the caller can warn.
+func EnrichGroups(client *churchtools.Client, groups []Group, opts churchtools.EnrichOptions) ([]Group, []churchtools.EnrichFailure, error) {
 	persons := make([]churchtools.Person, 0)
 	for _, group := range groups {
 		persons = append(persons, group.Persons...)
 	}
 
-	enriched, err := client.EnrichPersons(persons)
+	enriched, failures, err := client.EnrichPersons(persons, opts)
 	if err != nil {
-		return nil, fmt.Errorf("Personendetails laden: %w", err)
+		return nil, failures, fmt.Errorf("Personendetails laden: %w", err)
 	}
 
 	byID := make(map[int]churchtools.Person, len(enriched))
@@ -35,5 +37,5 @@ func EnrichGroups(client *churchtools.Client, groups []Group) ([]Group, error) {
 		}
 		result[i] = Group{DupID: group.DupID, Persons: persons}
 	}
-	return result, nil
+	return result, failures, nil
 }

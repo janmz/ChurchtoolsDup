@@ -2,9 +2,9 @@ package duplicates
 
 import (
 	"sort"
-	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	churchtools "github.com/janmz/churchtools-dup/internal/churchtools"
 	csvfile "github.com/janmz/churchtools-dup/internal/csvfile"
@@ -16,50 +16,61 @@ type Group struct {
 	Persons []churchtools.Person
 }
 
+// MaxSharedEmailPersons is the largest number of persons sharing one e-mail
+// address that are still linked automatically. Larger clusters (office or
+// placeholder addresses such as info@gemeinde.de) are reported instead.
+const MaxSharedEmailPersons = 5
+
+// SharedEmail describes an e-mail address used by too many persons to be a
+// duplicate indicator.
+type SharedEmail struct {
+	Email string
+	Count int
+}
+
+// MatchReport carries hints from duplicate detection for the user.
+type MatchReport struct {
+	// SharedEmails were not used for linking (sorted by address).
+	SharedEmails []SharedEmail
+}
+
 // FindGroups detects duplicate clusters for a campus within the full person list.
 // Only groups with at least one person at campusID are returned.
-func FindGroups(campusID int, allPersons []churchtools.Person) []Group {
+func FindGroups(campusID int, allPersons []churchtools.Person) ([]Group, MatchReport) {
 	if campusID <= 0 || len(allPersons) < 2 {
-		return nil
+		return nil, MatchReport{}
 	}
 	return findGroups(allPersons, campusID, true)
 }
 
 // FindAllGroups detects duplicate clusters across the full person list without
 // filtering by campus.
-func FindAllGroups(allPersons []churchtools.Person) []Group {
+func FindAllGroups(allPersons []churchtools.Person) ([]Group, MatchReport) {
 	if len(allPersons) < 2 {
-		return nil
+		return nil, MatchReport{}
 	}
 	return findGroups(allPersons, 0, false)
 }
 
-func findGroups(allPersons []churchtools.Person, campusID int, requireCampus bool) []Group {
+func findGroups(allPersons []churchtools.Person, campusID int, requireCampus bool) ([]Group, MatchReport) {
 	byID := make(map[int]churchtools.Person, len(allPersons))
-	var campusIDs map[int]struct{}
-	if requireCampus {
-		campusIDs = make(map[int]struct{})
-		for _, person := range allPersons {
-			byID[person.ID] = person
-			if person.CampusID == campusID {
-				campusIDs[person.ID] = struct{}{}
-			}
-		}
-	} else {
-		for _, person := range allPersons {
-			byID[person.ID] = person
+	campusIDs := make(map[int]struct{})
+	for _, person := range allPersons {
+		byID[person.ID] = person
+		if requireCampus && person.CampusID == campusID {
+			campusIDs[person.ID] = struct{}{}
 		}
 	}
 
+	m := matcher{massEmails: findMassEmails(allPersons)}
 	uf := newUnionFind()
-	linkByEmail(allPersons, uf)
-	linkByNameBlocks(allPersons, uf)
+	m.linkByEmail(allPersons, uf)
+	m.linkByNameBlocks(allPersons, uf)
 
-	components := uf.components()
+	// components are sorted by their smallest person ID, so DupIDs are
+	// stable for the same data set regardless of map iteration order.
 	groups := make([]Group, 0)
-	dupID := 1
-
-	for _, ids := range components {
+	for _, ids := range uf.components() {
 		if len(ids) < 2 {
 			continue
 		}
@@ -76,22 +87,46 @@ func findGroups(allPersons []churchtools.Person, campusID int, requireCampus boo
 		if len(persons) < 2 {
 			continue
 		}
-
-		sort.Slice(persons, func(i, j int) bool {
-			if persons[i].ID == persons[j].ID {
-				return false
-			}
-			return persons[i].ID < persons[j].ID
-		})
-
-		groups = append(groups, Group{DupID: dupID, Persons: persons})
-		dupID++
+		groups = append(groups, Group{DupID: len(groups) + 1, Persons: persons})
 	}
 
-	sort.Slice(groups, func(i, j int) bool {
-		return groups[i].DupID < groups[j].DupID
-	})
-	return groups
+	return groups, MatchReport{SharedEmails: m.sharedEmailList()}
+}
+
+// matcher holds per-run state for duplicate detection.
+type matcher struct {
+	massEmails map[string]int // normalized e-mail → number of persons
+}
+
+func (m matcher) isMassEmail(email string) bool {
+	_, ok := m.massEmails[email]
+	return ok
+}
+
+func (m matcher) sharedEmailList() []SharedEmail {
+	list := make([]SharedEmail, 0, len(m.massEmails))
+	for email, count := range m.massEmails {
+		list = append(list, SharedEmail{Email: email, Count: count})
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Email < list[j].Email })
+	return list
+}
+
+// findMassEmails returns addresses used by more than MaxSharedEmailPersons persons.
+func findMassEmails(persons []churchtools.Person) map[string]int {
+	counts := make(map[string]int)
+	for _, person := range persons {
+		if email := normalizeEmail(person.PrimaryEmail()); email != "" {
+			counts[email]++
+		}
+	}
+	mass := make(map[string]int)
+	for email, count := range counts {
+		if count > MaxSharedEmailPersons {
+			mass[email] = count
+		}
+	}
+	return mass
 }
 
 // GroupsToEntries flattens duplicate groups into CSV rows.
@@ -118,11 +153,13 @@ func containsCampusPerson(ids []int, campusIDs map[int]struct{}) bool {
 	return false
 }
 
-func linkByEmail(persons []churchtools.Person, uf *unionFind) {
+// linkByEmail unions persons sharing an e-mail address, except couples sharing
+// one mailbox and addresses used by too many persons (mass e-mails).
+func (m matcher) linkByEmail(persons []churchtools.Person, uf *unionFind) {
 	byEmail := make(map[string][]churchtools.Person)
 	for _, person := range persons {
 		email := normalizeEmail(person.PrimaryEmail())
-		if email == "" {
+		if email == "" || m.isMassEmail(email) {
 			continue
 		}
 		byEmail[email] = append(byEmail[email], person)
@@ -140,7 +177,8 @@ func linkByEmail(persons []churchtools.Person, uf *unionFind) {
 	}
 }
 
-func linkByNameBlocks(persons []churchtools.Person, uf *unionFind) {
+// linkByNameBlocks compares persons sharing at least one blocking key.
+func (m matcher) linkByNameBlocks(persons []churchtools.Person, uf *unionFind) {
 	blocks := make(map[string][]churchtools.Person)
 	for _, person := range persons {
 		for _, key := range blockingKeys(person) {
@@ -148,24 +186,20 @@ func linkByNameBlocks(persons []churchtools.Person, uf *unionFind) {
 		}
 	}
 
-	seen := make(map[string]struct{})
+	seen := make(map[[2]int]struct{})
 	for _, block := range blocks {
-		if len(block) < 2 {
-			continue
-		}
 		for i := 0; i < len(block); i++ {
 			for j := i + 1; j < len(block); j++ {
-				a := block[i]
-				b := block[j]
+				a, b := block[i], block[j]
 				if a.ID == b.ID {
 					continue
 				}
-				pairKey := pairKey(a.ID, b.ID)
-				if _, ok := seen[pairKey]; ok {
+				key := pairKey(a.ID, b.ID)
+				if _, ok := seen[key]; ok {
 					continue
 				}
-				if personsMatch(a, b) {
-					seen[pairKey] = struct{}{}
+				seen[key] = struct{}{}
+				if m.personsMatch(a, b) {
 					uf.union(a.ID, b.ID)
 				}
 			}
@@ -173,38 +207,56 @@ func linkByNameBlocks(persons []churchtools.Person, uf *unionFind) {
 	}
 }
 
-func pairKey(a, b int) string {
+func pairKey(a, b int) [2]int {
 	if a > b {
 		a, b = b, a
 	}
-	return strconv.Itoa(a) + ":" + strconv.Itoa(b)
+	return [2]int{a, b}
 }
 
+// initial returns the first letter of a name token.
+func initial(token string) string {
+	for _, r := range token {
+		return string(r)
+	}
+	return ""
+}
+
+// blockingKeys returns the candidate keys of a person. Two persons are only
+// compared when they share a key, so every rule in personsMatch needs a key
+// that both sides produce:
+//   - "a:" first-name initial + city + street (same address, initials allowed)
+//   - "n:" first-name initial + each last-name token (initials and compound
+//     last names)
+//   - the same "n:" keys with first and last name swapped, so
+//     "Hans Meier" and "Meier Hans" meet in one block.
 func blockingKeys(person churchtools.Person) []string {
 	cityMain, _ := normalizeCity(person.City)
 	street := normalizeStreet(person.Street)
 	first := nameTokens(person.FirstName)
 	last := nameTokens(person.LastName)
 
-	keys := make([]string, 0, 8)
+	keys := make([]string, 0, 2+len(first)+len(last))
 	if len(first) > 0 && cityMain != "" && street != "" {
-		keys = append(keys, "fcs:"+first[0]+"|"+cityMain+"|"+street)
+		keys = append(keys, "a:"+initial(first[0])+"|"+cityMain+"|"+street)
 	}
 	if len(first) > 0 && len(last) > 0 {
-		keys = append(keys, "fl:"+first[0]+"|"+last[0])
-		keys = append(keys, "lf:"+last[0]+"|"+first[0])
+		for _, token := range last {
+			keys = append(keys, "n:"+initial(first[0])+"|"+token)
+		}
+		for _, token := range first {
+			keys = append(keys, "n:"+initial(last[0])+"|"+token)
+		}
 	}
 	return keys
 }
 
-func personsMatch(a, b churchtools.Person) bool {
+// personsMatch applies the duplicate rules to two persons.
+func (m matcher) personsMatch(a, b churchtools.Person) bool {
 	emailA := normalizeEmail(a.PrimaryEmail())
 	emailB := normalizeEmail(b.PrimaryEmail())
-	if emailA != "" && emailA == emailB {
-		if isSharedEmailCouple(a, b) {
-			return false
-		}
-		return true
+	if emailA != "" && emailA == emailB && !m.isMassEmail(emailA) {
+		return !isSharedEmailCouple(a, b)
 	}
 
 	streetA := normalizeStreet(a.Street)
@@ -292,23 +344,16 @@ func initialsMatch(a, b []string) bool {
 	return true
 }
 
+// tokenMatchesInitial reports equal tokens or a single-letter initial that
+// starts the other token ("j" ↔ "jan", also for non-ASCII letters).
 func tokenMatchesInitial(a, b string) bool {
 	if a == b {
 		return true
 	}
-	if len(a) == 1 && strings.HasPrefix(b, a) {
+	if utf8.RuneCountInString(a) == 1 && strings.HasPrefix(b, a) {
 		return true
 	}
-	if len(b) == 1 && strings.HasPrefix(a, b) {
-		return true
-	}
-	if len(a) > 1 && len(b) == 1 && strings.HasPrefix(a, b) {
-		return true
-	}
-	if len(b) > 1 && len(a) == 1 && strings.HasPrefix(b, a) {
-		return true
-	}
-	return false
+	return utf8.RuneCountInString(b) == 1 && strings.HasPrefix(a, b)
 }
 
 func tokensSubset(smaller, larger []string) bool {
@@ -469,12 +514,9 @@ func canonicalizeStreetToken(token string) string {
 		return ""
 	}
 
+	// "ß" was already replaced by "ss" in normalizeStreet.
 	if token == "str" || token == "strasse" {
 		return "strasse"
-	}
-
-	if strings.HasSuffix(token, "straße") {
-		return strings.TrimSuffix(token, "straße") + "strasse"
 	}
 	if strings.HasSuffix(token, "strasse") {
 		return token
@@ -518,6 +560,8 @@ func (uf *unionFind) union(a, b int) {
 	uf.parent[rootB] = rootA
 }
 
+// components returns all sets with their IDs sorted ascending; the sets are
+// ordered by their smallest ID (independent of union order).
 func (uf *unionFind) components() [][]int {
 	buckets := make(map[int][]int)
 	for id := range uf.parent {
@@ -525,17 +569,11 @@ func (uf *unionFind) components() [][]int {
 		buckets[root] = append(buckets[root], id)
 	}
 
-	roots := make([]int, 0, len(buckets))
-	for root := range buckets {
-		roots = append(roots, root)
-	}
-	sort.Ints(roots)
-
-	result := make([][]int, 0, len(roots))
-	for _, root := range roots {
-		ids := append([]int(nil), buckets[root]...)
+	result := make([][]int, 0, len(buckets))
+	for _, ids := range buckets {
 		sort.Ints(ids)
 		result = append(result, ids)
 	}
+	sort.Slice(result, func(i, j int) bool { return result[i][0] < result[j][0] })
 	return result
 }

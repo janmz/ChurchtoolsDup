@@ -12,7 +12,7 @@ import (
 func TestHasModulePermission(t *testing.T) {
 	perms := map[string]any{
 		"churchdb": map[string]any{
-			"export data": true,
+			"export data":  true,
 			"write access": false,
 			"view alldata": []any{1.0, 2.0},
 		},

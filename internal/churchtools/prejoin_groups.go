@@ -60,7 +60,6 @@ func (c *Client) EnsurePreJoinGroups(groupNames []string) ([]PreJoinGroupResult,
 					Message:   "Bereits Mitglied",
 					Skipped:   true,
 				}
-				passProgress = true
 				continue
 			}
 
@@ -82,12 +81,18 @@ func (c *Client) EnsurePreJoinGroups(groupNames []string) ([]PreJoinGroupResult,
 				GroupName: name,
 				Status:    membership.Status,
 				Message:   membership.Message,
+				Skipped:   membership.AlreadyMember,
 			}
 			completed[name] = result
 			if membership.Status == MembershipDenied {
 				nextPending = append(nextPending, name)
 			}
-			passProgress = true
+			// Only a newly active membership can grant rights that make other
+			// groups visible or joinable; denials and pending requests do not,
+			// so they must not trigger another pass.
+			if membership.Status == MembershipActive && !membership.AlreadyMember {
+				passProgress = true
+			}
 		}
 
 		pending = nextPending

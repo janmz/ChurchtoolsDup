@@ -1,17 +1,19 @@
 package churchtools
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strings"
 )
 
 var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
+
+// numberBadgePattern matches markup that only holds a number, such as the
+// sort badge in "<span>1</span> Personen bearbeiten".
+var numberBadgePattern = regexp.MustCompile(`<([a-zA-Z]+)[^>]*>\s*[0-9]+\s*</([a-zA-Z]+)>`)
 
 // ErrGroupNotFound is returned when ListGroups has no matching group name.
 var ErrGroupNotFound = errors.New("Gruppe nicht gefunden")
@@ -50,28 +52,135 @@ func (c *Client) FindGroupByName(name string) (Group, error) {
 		return Group{}, err
 	}
 
-	var matches []Group
-	for _, group := range groups {
-		plain := plainGroupName(group.Name)
-		if plain == name || strings.Contains(plain, name) {
-			matches = append(matches, group)
-		}
-	}
-
+	matches := matchGroupsByName(groups, name)
 	switch len(matches) {
 	case 1:
 		return matches[0], nil
 	case 0:
 		return Group{}, fmt.Errorf("%w: %q", ErrGroupNotFound, name)
 	default:
-		return Group{}, fmt.Errorf("mehrere Gruppen passen zu %q", name)
+		names := make([]string, len(matches))
+		for i, group := range matches {
+			names[i] = fmt.Sprintf("%q (ID %d)", plainGroupName(group.Name), group.ID)
+		}
+		return Group{}, fmt.Errorf("mehrere Gruppen passen zu %q: %s", name, strings.Join(names, ", "))
+	}
+}
+
+// groupNameKey normalises a group name for comparison: number badges and
+// HTML stripped, whitespace collapsed, case-insensitive.
+func groupNameKey(name string) string {
+	return strings.ToLower(plainGroupName(numberBadgePattern.ReplaceAllString(name, "")))
+}
+
+// matchGroupsByName returns the groups whose name equals name
+// (case-insensitive, HTML stripped). Substrings never match: the tool joins
+// these groups to gain rights, and a group such as "Kurs ChurchTools Admin"
+// created by anyone must not be mistaken for "ChurchTools Admin".
+func matchGroupsByName(groups []Group, name string) []Group {
+	want := groupNameKey(name)
+	var exact []Group
+	for _, group := range groups {
+		if groupNameKey(group.Name) == want {
+			exact = append(exact, group)
+		}
+	}
+	return exact
+}
+
+// PublicSignupConfirm decides whether personID may be signed up for groupID
+// through the public group signup form (used when a direct membership request
+// is forbidden). Without a confirm function no public signup is attempted.
+type PublicSignupConfirm func(groupID, personID int) bool
+
+// SetPublicSignupConfirm sets the confirmation used before a public signup.
+func (c *Client) SetPublicSignupConfirm(confirm PublicSignupConfirm) {
+	c.confirmPublicSignup = confirm
+}
+
+// groupMembershipStatus returns the status of an existing membership
+// ("active", "requested", "waiting", …) or "" when none is visible.
+func (c *Client) groupMembershipStatus(groupID, personID int) (string, bool, error) {
+	path := fmt.Sprintf("/groups/%d/members/%d", groupID, personID)
+	status, body, err := c.callAPI(http.MethodGet, path, nil, nil)
+	if err != nil {
+		return "", false, err
+	}
+	switch status {
+	case http.StatusOK:
+		var envelope struct {
+			Data struct {
+				GroupMemberStatus string `json:"groupMemberStatus"`
+			} `json:"data"`
+		}
+		_ = json.Unmarshal(body, &envelope)
+		return strings.ToLower(strings.TrimSpace(envelope.Data.GroupMemberStatus)), true, nil
+	case http.StatusNotFound:
+		return "", true, nil
+	default:
+		// e.g. 403: membership not visible to us – caller decides.
+		return "", false, nil
 	}
 }
 
 // RequestGroupMembership adds the person to a group or requests membership.
+// An existing membership is left untouched (a PUT would clear its comment and
+// end date), and the PUT uses only_add so it never updates one.
+//
+// Memberships newly created for the logged-in user are remembered so that
+// LeaveJoinedGroups can undo them after the run.
 func (c *Client) RequestGroupMembership(groupID, personID int) (MembershipRequestResult, error) {
+	result, err := c.requestGroupMembership(groupID, personID)
+	if err == nil && !result.AlreadyMember && personID == c.personID &&
+		(result.Status == MembershipActive || result.Status == MembershipRequested) {
+		c.joinedGroups = append(c.joinedGroups, groupID)
+	}
+	return result, err
+}
+
+// LeaveResult reports leaving one temporarily joined group.
+type LeaveResult struct {
+	GroupID int
+	Err     error
+}
+
+// LeaveJoinedGroups removes the logged-in user from all groups this client
+// joined (in reverse order, so rights granted by an earlier group are still
+// available while leaving a later one). Groups the user belonged to before
+// are never touched.
+func (c *Client) LeaveJoinedGroups() []LeaveResult {
+	results := make([]LeaveResult, 0, len(c.joinedGroups))
+	for i := len(c.joinedGroups) - 1; i >= 0; i-- {
+		groupID := c.joinedGroups[i]
+		path := fmt.Sprintf("/groups/%d/members/%d", groupID, c.personID)
+		status, body, err := c.callAPI(http.MethodDelete, path, nil, nil)
+		if err == nil && status != http.StatusOK && status != http.StatusNoContent && status != http.StatusNotFound {
+			err = newAPIError(status, apiBodyMessage(body, "Austritt fehlgeschlagen"), body)
+		}
+		results = append(results, LeaveResult{GroupID: groupID, Err: err})
+	}
+	c.joinedGroups = nil
+	return results
+}
+
+func (c *Client) requestGroupMembership(groupID, personID int) (MembershipRequestResult, error) {
+	existing, known, err := c.groupMembershipStatus(groupID, personID)
+	if err != nil {
+		return MembershipRequestResult{}, err
+	}
+	if known && existing != "" {
+		switch existing {
+		case "requested", "waiting":
+			return MembershipRequestResult{Status: MembershipRequested, Message: "Mitgliedschaft bereits beantragt", AlreadyMember: true}, nil
+		case "to_delete":
+			return MembershipRequestResult{Status: MembershipDenied, Message: "Mitgliedschaft ist zum Löschen markiert", AlreadyMember: true}, nil
+		default:
+			return MembershipRequestResult{Status: MembershipActive, Message: "Bereits Mitglied", AlreadyMember: true}, nil
+		}
+	}
+
 	path := fmt.Sprintf("/groups/%d/members/%d", groupID, personID)
-	statusCode, body, err := c.putAPI(path, map[string]any{}, true)
+	statusCode, body, err := c.putAPI(path, map[string]any{"only_add": true})
 	if err != nil {
 		return MembershipRequestResult{}, err
 	}
@@ -91,16 +200,23 @@ func (c *Client) RequestGroupMembership(groupID, personID int) (MembershipReques
 			Message: "Mitgliedschaft beantragt",
 		}, nil
 	case http.StatusForbidden:
+		if c.confirmPublicSignup == nil || !c.confirmPublicSignup(groupID, personID) {
+			return MembershipRequestResult{
+				Status:  MembershipDenied,
+				Message: apiBodyMessage(body, "Beitritt nicht erlaubt (öffentliche Anmeldung nicht bestätigt)"),
+			}, nil
+		}
 		return c.requestGroupMembershipViaPublicSignup(groupID, personID)
 	default:
-		msg := strings.TrimSpace(string(body))
-		if msg == "" {
-			msg = fmt.Sprintf("http %d", statusCode)
-		}
-		return MembershipRequestResult{Status: MembershipDenied, Message: msg}, nil
+		return MembershipRequestResult{
+			Status:  MembershipDenied,
+			Message: apiBodyMessage(body, fmt.Sprintf("http %d", statusCode)),
+		}, nil
 	}
 }
 
+// plainGroupName removes HTML tags for display (number badges keep their
+// digits, e.g. "1 Personen bearbeiten").
 func plainGroupName(name string) string {
 	plain := htmlTagPattern.ReplaceAllString(name, "")
 	return strings.Join(strings.Fields(strings.TrimSpace(plain)), " ")
@@ -144,7 +260,7 @@ func (c *Client) requestGroupMembershipViaPublicSignup(groupID, personID int) (M
 	tokenStatus, tokenBody, err := c.postAPI(tokenPath, map[string]any{
 		"personId": personID,
 		"clicked":  []int{personID},
-	}, true)
+	})
 	if err != nil {
 		return MembershipRequestResult{}, err
 	}
@@ -164,7 +280,7 @@ func (c *Client) requestGroupMembershipViaPublicSignup(groupID, personID int) (M
 		"forms": []map[string]any{
 			{"personId": personID, "form": []any{}},
 		},
-	}, true)
+	})
 	if err != nil {
 		return MembershipRequestResult{}, err
 	}
@@ -240,16 +356,15 @@ func apiBodyMessage(body []byte, fallback string) string {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
-		msg := strings.TrimSpace(string(body))
-		if msg == "" {
-			return fallback
+		if msg := cleanMessage(string(body)); msg != "" {
+			return msg
 		}
+		return fallback
+	}
+	if msg := cleanMessage(envelope.Message); msg != "" {
 		return msg
 	}
-	if msg := strings.TrimSpace(envelope.Message); msg != "" {
-		return msg
-	}
-	if msg := strings.TrimSpace(envelope.Data.Message); msg != "" {
+	if msg := cleanMessage(envelope.Data.Message); msg != "" {
 		return msg
 	}
 	return fallback
@@ -268,33 +383,4 @@ func waitingListFromBody(body []byte) bool {
 		return false
 	}
 	return envelope.Data.WaitinglistPos != nil && *envelope.Data.WaitinglistPos > 0
-}
-
-func (c *Client) putAPI(path string, payload any, allowRelogin bool) (int, []byte, error) {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPut, c.apiURL(path), bytes.NewReader(body))
-	if err != nil {
-		return 0, nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	c.applyAuth(req)
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return 0, nil, fmt.Errorf("api PUT %s: %w", path, err)
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode == http.StatusUnauthorized {
-		if err := c.reloginOnce(allowRelogin); err != nil {
-			return resp.StatusCode, respBody, err
-		}
-		return c.putAPI(path, payload, false)
-	}
-	return resp.StatusCode, respBody, nil
 }

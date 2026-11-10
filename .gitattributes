@@ -1,0 +1,4 @@
+# Go sources always use LF, also in Windows working copies, so gofmt -l
+# (local CI script) reports only real formatting differences.
+*.go text eol=lf
+*.sh text eol=lf

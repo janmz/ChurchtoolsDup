@@ -8,6 +8,8 @@ dup.csv
 dup-test.csv
 dup-*.csv
 personen*.csv
+*.csv
+*.xlsx
 
 # Build output
 /churchtools-dup
@@ -18,6 +20,10 @@ rsrc_windows_*.syso
 .cursor/
 .cursorrules
 AGENTS.md
+CLAUDE.md
+.claude/
+securityreport.md
+codereview.md   
 *.code-workspace
 
 # OS

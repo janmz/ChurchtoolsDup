@@ -1,7 +1,9 @@
 package churchtools
 
 import (
+	"fmt"
 	"strings"
+	"time"
 )
 
 // MergePersonDetails overlays non-empty detail fields onto a list person record.
@@ -60,8 +62,25 @@ func MergePersonDetails(base, detail Person) Person {
 	return result
 }
 
-// EnrichPersons loads full person records and merges them into the given slice.
-func (c *Client) EnrichPersons(persons []Person) ([]Person, error) {
+// EnrichOptions controls EnrichPersons.
+type EnrichOptions struct {
+	// Delay is the pause between two detail requests.
+	Delay time.Duration
+	// Progress, when set, is called after each person with done and total.
+	Progress func(done, total int)
+}
+
+// EnrichFailure records a person whose details could not be loaded.
+type EnrichFailure struct {
+	PersonID int
+	Err      error
+}
+
+// EnrichPersons loads full person records and merges them into the given
+// slice. A failing detail request does not abort the run: the list data of
+// that person is kept and the failure is returned for a warning. Only when
+// every request fails (e.g. lost session) an error is returned.
+func (c *Client) EnrichPersons(persons []Person, opts EnrichOptions) ([]Person, []EnrichFailure, error) {
 	seen := make(map[int]struct{}, len(persons))
 	ids := make([]int, 0, len(persons))
 	for _, person := range persons {
@@ -76,12 +95,23 @@ func (c *Client) EnrichPersons(persons []Person) ([]Person, error) {
 	}
 
 	details := make(map[int]Person, len(ids))
-	for _, id := range ids {
+	var failures []EnrichFailure
+	for i, id := range ids {
+		if i > 0 && opts.Delay > 0 {
+			sleep(opts.Delay)
+		}
 		detail, err := c.PersonByID(id)
 		if err != nil {
-			return nil, err
+			failures = append(failures, EnrichFailure{PersonID: id, Err: err})
+		} else {
+			details[id] = detail
 		}
-		details[id] = detail
+		if opts.Progress != nil {
+			opts.Progress(i+1, len(ids))
+		}
+	}
+	if len(ids) > 0 && len(failures) == len(ids) {
+		return nil, failures, fmt.Errorf("keine Personendetails ladbar: %w", failures[0].Err)
 	}
 
 	enriched := make([]Person, len(persons))
@@ -92,7 +122,7 @@ func (c *Client) EnrichPersons(persons []Person) ([]Person, error) {
 			enriched[i] = person
 		}
 	}
-	return enriched, nil
+	return enriched, failures, nil
 }
 
 // CampusNamesByID builds a lookup table for standort names.
