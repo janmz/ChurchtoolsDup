@@ -244,8 +244,11 @@ go build -o churchtools-dup .
 - **Encrypted secrets:** `login_token` and `password` in `config.json` are
   encrypted with [sconfig](https://github.com/janmz/sconfig) on first start
   (`login_token_secure`, `secure_password`; the plaintext field then shows a
-  marker). The encryption is bound to this computer – on another PC enter the
-  secrets again. To change a secret, write the new plaintext value into
+  marker). The encryption is bound to this computer, its host name and the
+  drive that holds `config.json` (sconfig 3.1, key format v3; older values
+  are converted automatically) – after renaming the PC, moving `config.json`
+  to another drive or on another PC enter the secrets again. To change a
+  secret, write the new plaintext value into
   `login_token` / `password`.
 - `config.json` must be located below the program directory, the current
   working directory or your home directory (sconfig rule).

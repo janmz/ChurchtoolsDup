@@ -3,8 +3,8 @@ github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
-github.com/janmz/sconfig/v3 v3.0.0 h1:TgNpZwnrcH2EdPLrGnEXBr3hsVXx4VOhDNvbdssVyoM=
-github.com/janmz/sconfig/v3 v3.0.0/go.mod h1:ISqrSIkkS3sFvLwkFP9zW8rFby3U+hqAiE+6YLbcyn0=
+github.com/janmz/sconfig/v3 v3.1.1 h1:Z97/pjq+i8a1m/mc+uyMMew+MCvOdpRJpsNfPvBGSKc=
+github.com/janmz/sconfig/v3 v3.1.1/go.mod h1:ISqrSIkkS3sFvLwkFP9zW8rFby3U+hqAiE+6YLbcyn0=
 github.com/nicksnyder/go-i18n/v2 v2.6.0 h1:C/m2NNWNiTB6SK4Ao8df5EWm3JETSTIGNXBpMJTxzxQ=
 github.com/nicksnyder/go-i18n/v2 v2.6.0/go.mod h1:88sRqr0C6OPyJn0/KRNaEz1uWorjxIKP7rUUcvycecE=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=

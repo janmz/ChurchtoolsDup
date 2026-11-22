@@ -282,8 +282,11 @@ go build -o churchtools-dup.exe .
   `config.json` werden beim ersten Start mit
   [sconfig](https://github.com/janmz/sconfig) verschlüsselt
   (`login_token_secure`, `secure_password`; im Klartextfeld steht danach ein
-  Hinweistext). Die Verschlüsselung ist an diesen Rechner gebunden – auf
-  einem anderen PC die Zugangsdaten neu eintragen. Zum Ändern den neuen Wert
+  Hinweistext). Die Verschlüsselung ist an diesen Rechner, seinen Namen und
+  das Laufwerk von `config.json` gebunden (sconfig 3.1, Schlüsselformat v3;
+  ältere Werte werden automatisch umgewandelt) – nach dem Umbenennen des PCs,
+  dem Verschieben von `config.json` auf ein anderes Laufwerk oder auf einem
+  anderen PC die Zugangsdaten neu eintragen. Zum Ändern den neuen Wert
   im Klartext in `login_token` bzw. `password` schreiben.
 - `config.json` muss unterhalb des Programmverzeichnisses, des aktuellen
   Arbeitsverzeichnisses oder des Benutzerverzeichnisses liegen (sconfig-Regel).

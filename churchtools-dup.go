@@ -10,13 +10,15 @@ package main
  * Its primary purpose is to help organizations such as churches maintain clean data and efficiently resolve duplicate entries in ChurchTools.
  *
  *
- * Version: 1.3.2.37 (in version.go zu ändern)
+ * Version: 1.3.3.38 (in version.go zu ändern)
  *
  * Author: Jan Neuhaus, VAYA Consulting, https://vaya-consulting.de/development
  *
  * Repository: https://github.com/janmz/ChurchtoolsDup
  *
  * ChangeLog:
+ * 22.11.26	1.3.3	Fix: Now using sconfig/v3
+ *  22.11.26	1.3.3	Update: sconfig v3.1.1 (key format v3, bound to host name and drive)
  *  10.11.26	1.3.2	Security audit: encrypted secrets (sconfig), no derived-host fallback, ACLs, temporary groups
  *  10.11.26	1.3.1Fix: CSRF-Token header on write requests (password sessions, legacy API)
  *  10.11.26	1.3.0	Code review fixes: relationship POST body, matching, groups, config, limits, CI lint
